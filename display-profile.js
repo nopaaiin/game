@@ -1,0 +1,92 @@
+'use strict';
+// TV3 adapter. The original 360x640 scene is kept intact and enlarged with nearest-neighbour sampling.
+const exhibitionDisplay={
+  tv:'3',cameraIndex:0,profile:null,matrix:null,preview:Q.get('preview')==='1',guides:Q.get('calibrate')==='1',
+  world:{x:15,y:17,scale:870/360},width:900,height:1573.405,
+  async init(){
+    const response=await fetch('display-config.json');
+    if(!response.ok)throw new Error('TV3 configuration unavailable');
+    this.profile=(await response.json()).profiles['3'];
+    const selected=Number(Q.get('camera')??this.profile.cameraIndex);
+    this.cameraIndex=Number.isInteger(selected)&&selected>=0?selected:0;
+    Object.assign(ACTIVE,this.profile.activeHandArea);
+    this.view=document.createElement('canvas');this.view.id='tv3View';
+    document.getElementById('wrap').prepend(this.view);this.output=this.view.getContext('2d');
+    this.path=new Path2D();this.profile.polygonMm.forEach(([x,y],i)=>i?this.path.lineTo(x,y):this.path.moveTo(x,y));this.path.closePath();
+    this.resize();addEventListener('resize',()=>this.resize());
+  },
+  resize(){
+    const dpr=Math.min(devicePixelRatio||1,2),c=this.profile.calibration,p=this.profile,w=this.world;
+    this.view.width=Math.round(innerWidth*dpr);this.view.height=Math.round(innerHeight*dpr);
+    const value=(key,fallback)=>{const n=Number(Q.get(key));return Q.has(key)&&Number.isFinite(n)?n:fallback;};
+    const previewWidth=this.preview?Math.min(this.view.width,this.view.height*9/16):this.view.width;
+    const previewHeight=this.preview?previewWidth*16/9:this.view.height;
+    const sx=previewWidth/Math.max(1,value('screenWidth',c.screenWidthMm));
+    const sy=previewHeight/Math.max(1,value('screenHeight',c.screenHeightMm));
+    this.matrix={sx,sy,x:(this.view.width-previewWidth)/2+(p.windowLeftMm-value('bezelLeft',c.bezelLeftMm)+value('offsetX',c.offsetXmm))*sx,
+      y:(this.view.height-previewHeight)/2+(p.windowTopMm-value('bezelTop',c.bezelTopMm)+value('offsetY',c.offsetYmm))*sy,dpr};
+    const m=this.matrix,stage=document.getElementById('stage');
+    Object.assign(stage.style,{left:(m.x+w.x*sx)/dpr+'px',top:(m.y+w.y*sy)/dpr+'px',
+      width:GW*w.scale*sx/dpr+'px',height:GH*w.scale*sy/dpr+'px'});
+    stage.style.setProperty('--u',w.scale*sx/dpr+'px');
+    this.output.imageSmoothingEnabled=false;
+  },
+  clientToGame(x,y){const r=document.getElementById('stage').getBoundingClientRect();return{x:(x-r.left)/r.width*GW,y:(y-r.top)/r.height*GH};},
+  present(){
+    const c=this.output,m=this.matrix,w=this.world;
+    const label=game.mode==='attract'?'치킨 조리 게임 · 손바닥을 보여 주세요':
+      game.mode==='result'?'치킨 완성 · 총점 '+game.total:
+      '스테이지 '+(game.stageIdx+1)+' '+(game.stage?.name||'')+' · '+game.mode+' · 점수 '+(game.stage?.score||0);
+    if(this.view.getAttribute('aria-label')!==label){this.view.setAttribute('role','img');this.view.setAttribute('aria-label',label);}
+    c.setTransform(1,0,0,1,0,0);c.imageSmoothingEnabled=false;
+    c.fillStyle='#140c1c';c.fillRect(0,0,this.view.width,this.view.height);
+    c.setTransform(m.sx,0,0,m.sy,m.x,m.y);
+    // Draw the current scene's exact background at the same origin and scale.
+    // This fills the arch tip and side gutters without exposing a different stage.
+    c.save();c.translate(w.x,w.y);c.scale(w.scale,w.scale);paintKitchenBackdrop(c);c.restore();
+    c.drawImage(cv,w.x,w.y,GW*w.scale,GH*w.scale);
+    if(this.preview){
+      const mask=new Path2D();mask.rect(-m.x/m.sx-1,-m.y/m.sy-1,this.view.width/m.sx+2,this.view.height/m.sy+2);mask.addPath(this.path);
+      c.fillStyle='#140c1c';c.fill(mask,'evenodd');
+    }
+    if(this.guides){
+      c.save();c.strokeStyle='#ff6464';c.lineWidth=3;c.stroke(this.path);
+      c.strokeStyle='#7dff8a';c.setLineDash([10,8]);c.strokeRect(25,422,850,1130);c.setLineDash([]);
+      c.fillStyle='#1e1226';c.fillRect(125,420,650,60);c.fillStyle='#ffe066';c.font='22px Galmuri';c.textAlign='center';
+      c.fillText('TV3 · '+(this.profile.calibration.measured?'실측 적용':'본체 기준 · 실화면 보정 필요'),450,459);c.restore();
+    }
+  }
+};
+window.exhibitionDisplay=exhibitionDisplay;
+window.DEBUG_BOWL=false;
+addEventListener('keydown',e=>{
+  if(e.repeat)return;
+  if(e.key.toLowerCase()==='d')window.DEBUG_BOWL=!window.DEBUG_BOWL;
+  if(e.key.toLowerCase()==='g')exhibitionDisplay.guides=!exhibitionDisplay.guides;
+  if(e.key.toLowerCase()==='c')document.body.classList.toggle('hide-camera');
+});
+// Short movement demonstrations use the existing pixel cursors and ingredient sprites.
+function drawGestureDemo(st,t){
+  const phase=(t%1.7)/1.7;
+  if(st===Stage1){
+    const x=GW/2+Math.sin(t*2.5)*57;sprite('bowl',x,518,.65);
+    ctx.drawImage(CUR_HAND,R(x-12),542,24,21);text('←',95,543,16,'#ffe066');text('→',265,543,16,'#ffe066');
+  }else if(st===Stage2){
+    sprite('green',GW/2,518,.75,-.2);
+    for(let i=0;i<6;i++){const k=clamp(phase-i*.03,0,1);ctx.fillStyle=`rgba(160,230,255,${1-i/6})`;ctx.fillRect(R(115+k*130),R(553-k*75),4,4);}
+    ctx.drawImage(CUR_KNIFE,R(105+phase*130),R(540-phase*75),32,32);
+  }else{
+    bar(94,515,172,8,.76,'#ffb13b');ctx.fillStyle='#7dff8a';ctx.fillRect(217,515,21,8);
+    const x=R(225+Math.sin(t*2.5)*4);ctx.drawImage(CUR_HAND,x-12,536,24,21);
+  }
+}
+const renderOriginalPixels=render;
+render=function(){
+  renderOriginalPixels();
+  if(SIM||BOT)text(BOT?'자동 시연':'손동작 테스트',12,GH-12,8,'#d8cce8','left');
+  exhibitionDisplay.present();
+};
+Promise.all([assetsReady,exhibitionDisplay.init()]).then(()=>bootGame()).catch(error=>{
+  showErr('전시 실행기로 열어 주세요\nTV3 설정 파일을 확인해 주세요');
+  cv.style.visibility='visible';bg('bg2','rgba(20,10,34,.62)');console.error(error);
+});
