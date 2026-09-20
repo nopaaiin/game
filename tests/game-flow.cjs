@@ -119,5 +119,7 @@ function advance(seconds,bot=true){for(let i=0;i<Math.ceil(seconds*60);i++){
     const dish=record.find(a=>a.length===5&&!a[0].name&&a[0].width===34&&a[0].height===64);
     assert.ok(dish&&dish[2]>=148&&dish[2]+dish[4]<=292,'Result mascot overlaps title/score card');
   }
+  record=[];run('hand.visible=true;hand.openPalm=true;game.holdStart=game.t-.8;drawAttract(game.t)');
+  assert.equal(record.filter(a=>a[0]===run('CUR_HAND')).length,1,'A second live cursor covers the start instructions');
   console.log('PASS: original stage rules; TV3 geometry/1080p/4K; palm hold; three stages; pause/resume/replay; bowl layers; continuous background for every scene; all cards and hand markers inside the H03 arch.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

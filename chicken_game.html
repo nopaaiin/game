@@ -708,7 +708,7 @@ function render(){
   if(shake>0) ctx.translate(R(rnd(-shake,shake)),R(rnd(-shake,shake)));
   switch(game.mode){
   case 'attract': drawAttract(t); break;
-  case 'intro': game.stage.draw(); drawIntro(t); cursor(game.stage.cursorKind||'hand'); break;
+  case 'intro': game.stage.draw(); drawIntro(t); break;
   case 'play': game.stage.draw(); drawHud(); if(game.stage.cursorKind) cursor(game.stage.cursorKind); else if(game.stage===Stage1) drawBowlHint(); break;
   case 'pause': game.stage.draw(); drawHud(); drawPause(t); break;
   case 'clear': game.stage.draw(); drawClear(t); break;
@@ -756,10 +756,9 @@ function drawAttract(t){
   ctx.drawImage(CUR_HAND,R(GW/2-24),hy-21,48,42);
   if(game.holdStart!==null){
     const v=(t-game.holdStart)/T.START_HOLD;
-    const p=cursorPosition();pixelRing(p.x,p.y,30,v,OVEN.orange,4);
+    pixelRing(GW/2,hy,34,v,OVEN.orange,4);
     bar(80,470,200,6,v,OVEN.orange);
   }
-  cursor('hand');
 }
 function drawIntro(t){
   const k=t-game.modeAt, st=game.stage;
