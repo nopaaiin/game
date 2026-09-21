@@ -1,12 +1,20 @@
 'use strict';
+// file:// 나 오프라인에서 fetch 가 막힐 때 쓰는 내장 TV3 설정 (마우스 시뮬 버전용).
+const EMBEDDED_TV3_CONFIG={"source":"DDP H03 + CURVE01 / 2026.09.12 / TV3 / pages 5, 8, 13","bodyWidthMm":1090,"bodyHeightMm":1905,"profiles":{"3":{"label":"TV3","windowLeftMm":102.801,"windowTopMm":311.595,"windowWidthMm":900,"windowHeightMm":1573.405,"polygonMm":[[450.045,0.0],[520.433,4.971],[589.089,19.763],[654.32,44.01],[714.522,77.116],[768.211,118.267],[814.066,166.447],[850.958,220.471],[877.978,279.01],[894.46,340.621],[900.0,403.787],[900.0,1573.405],[0.0,1573.405],[0.0,403.787],[5.54,340.621],[22.022,279.01],[49.042,220.471],[85.934,166.447],[131.789,118.267],[185.478,77.116],[245.68,44.01],[310.911,19.763],[379.567,4.971],[449.955,0.0]],"cameraIndex":0,"activeHandArea":{"x0":0.14,"x1":0.86,"y0":0.1,"y1":0.9},"calibration":{"measured":false,"screenWidthMm":1090,"screenHeightMm":1905,"bezelLeftMm":0,"bezelTopMm":0,"offsetXmm":0,"offsetYmm":0}}}};
 // TV3 adapter. The original 360x640 scene is kept intact and enlarged with nearest-neighbour sampling.
 const exhibitionDisplay={
   tv:'3',cameraIndex:0,profile:null,matrix:null,preview:Q.get('preview')==='1',guides:Q.get('calibrate')==='1',
   world:{x:15,y:17,scale:870/360},width:900,height:1573.405,
   async init(){
-    const response=await fetch('display-config.json');
-    if(!response.ok)throw new Error('TV3 configuration unavailable');
-    this.profile=(await response.json()).profiles['3'];
+    let cfg;
+    try{
+      const response=await fetch('display-config.json');
+      if(!response.ok)throw new Error('bad response');
+      cfg=await response.json();
+    }catch(e){
+      cfg=EMBEDDED_TV3_CONFIG; // 서버 없이 파일로 열었을 때(예: 마우스 시뮬)
+    }
+    this.profile=cfg.profiles['3'];
     const selected=Number(Q.get('camera')??this.profile.cameraIndex);
     this.cameraIndex=Number.isInteger(selected)&&selected>=0?selected:0;
     Object.assign(ACTIVE,this.profile.activeHandArea);
