@@ -751,7 +751,7 @@ function drawAttract(t){
   bg('bg2','rgba(60,16,14,.52)');
   // 떠다니는 재료
   FOODS.forEach((k,i)=>sprite(k,70+i*110,208+Math.sin(t*2+i*1.7)*6,1.4,Math.sin(t*1.3+i)*.15));
-  text('굽네 · 오븐사우나',GW/2,54,10,OVEN.orange);
+  text('굽네 · 오븐사우나',GW/2,54,11,OVEN.orange);
   panel(30,82,GW-60,64,OVEN.red,OVEN.orange);
   text('치킨 조리 게임',GW/2,114,30,'#fff');
   sprite('bowl',GW/2,262,1.2);
@@ -811,7 +811,7 @@ function drawClear(t){
 function drawResult(t){
   const k=t-game.modeAt;
   bg('bg3','rgba(45,12,6,.52)');
-  text('굽네 · 오븐사우나',GW/2,54,10,OVEN.orange);
+  text('굽네 · 오븐사우나',GW/2,54,11,OVEN.orange);
   panel(30,82,GW-60,60,OVEN.red,OVEN.orange);
   text('치킨 완성!',GW/2,112,30,'#fff');
   const chk=img.chicken; if(chk){ const s=2; ctx.drawImage(getTint(chk,1),R(GW/2-chk.width*s/2),R(220-chk.height*s/2+Math.sin(t*4)*4),chk.width*s,chk.height*s); }
