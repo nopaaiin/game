@@ -48,15 +48,17 @@ const exhibitionDisplay={
     // so every art pixel becomes an even k x k block and text/rotations stay crisp.
     // The finished frame is then reduced by a tiny ratio (k -> actual scale) with
     // high-quality filtering, instead of uneven nearest-neighbour stretching.
+    // maxK drops automatically on a slow PC (see present) so hand input stays smooth.
     const ps=w.scale*Math.max(m.sx,m.sy);
-    const k=Math.max(1,Math.min(8,Math.ceil(ps-0.05)));
-    this.k=k;this.ratio=k/ps;
+    this.ps=ps;this.maxK=this.maxK||Number(Q.get('quality'))||4;
+    this.applyK();
+    this.output.imageSmoothingEnabled=false;
+  },
+  applyK(){
+    const k=Math.max(1,Math.min(this.maxK,Math.ceil(this.ps-0.05)));
+    this.k=k;
     if(cv.width!==GW*k||cv.height!==GH*k){cv.width=GW*k;cv.height=GH*k;}
     ctx.setTransform(k,0,0,k,0,0);ctx.imageSmoothingEnabled=false;
-    if(!this.hi){this.hi=document.createElement('canvas');this.hctx=this.hi.getContext('2d');}
-    this.hi.width=Math.ceil(this.view.width*this.ratio);this.hi.height=Math.ceil(this.view.height*this.ratio);
-    this.hctx.imageSmoothingEnabled=false;
-    this.output.imageSmoothingEnabled=false;
   },
   clientToGame(x,y){const r=document.getElementById('stage').getBoundingClientRect();return{x:(x-r.left)/r.width*GW,y:(y-r.top)/r.height*GH};},
   present(){
@@ -65,16 +67,21 @@ const exhibitionDisplay={
       game.mode==='result'?'치킨 완성 · 총점 '+game.total:
       '스테이지 '+(game.stageIdx+1)+' '+(game.stage?.name||'')+' · '+game.mode+' · 점수 '+(game.stage?.score||0);
     if(this.view.getAttribute('aria-label')!==label){this.view.setAttribute('role','img');this.view.setAttribute('aria-label',label);}
-    const out=this.output,r=this.ratio,hi=this.hi;
-    c=this.hctx;
+    // Adaptive quality: if frames take >22ms on average, lower the render multiple.
+    const pn=performance.now();
+    if(this.lastPresent){const d=pn-this.lastPresent;this.avg=this.avg?this.avg*.97+d*.03:d;
+      if(this.avg>22&&this.maxK>2&&!Q.get('quality')&&pn-(this.kChangedAt||0)>3000){this.maxK--;this.kChangedAt=pn;this.avg=16;this.applyK();}}
+    this.lastPresent=pn;
     c.setTransform(1,0,0,1,0,0);c.imageSmoothingEnabled=false;
-    c.fillStyle=OVEN.ink;c.fillRect(0,0,hi.width,hi.height);
-    c.setTransform(m.sx*r,0,0,m.sy*r,m.x*r,m.y*r);
+    c.fillStyle=OVEN.ink;c.fillRect(0,0,this.view.width,this.view.height);
+    c.setTransform(m.sx,0,0,m.sy,m.x,m.y);
     // Draw the current scene's exact background at the same origin and scale.
     // This fills the arch tip and side gutters without exposing a different stage.
     c.save();c.translate(w.x,w.y);c.scale(w.scale,w.scale);
     paintKitchenBackdrop(c);paintSceneVeil(c);c.restore();
-    c.drawImage(cv,w.x,w.y,GW*w.scale,GH*w.scale);
+    // The scene is rendered at k x; one high-quality resample maps it to the TV.
+    c.save();c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';
+    c.drawImage(cv,w.x,w.y,GW*w.scale,GH*w.scale);c.restore();
     // Render the supplied curved logo at display resolution, above the pixel scene.
     if(game.mode==='attract'||game.mode==='result'){
       c.save();c.translate(w.x,w.y);c.scale(w.scale,w.scale);drawBrandLogo(c);c.restore();
@@ -89,8 +96,6 @@ const exhibitionDisplay={
       c.fillStyle='#1e1226';c.fillRect(125,420,650,60);c.fillStyle='#ffe066';c.font='32px NeoDunggeunmo';c.textAlign='center';
       c.fillText('TV3 · '+(this.profile.calibration.measured?'실측 적용':'본체 기준 · 실화면 보정 필요'),450,459);c.restore();
     }
-    out.setTransform(1,0,0,1,0,0);out.imageSmoothingEnabled=true;out.imageSmoothingQuality='high';
-    out.drawImage(hi,0,0,hi.width,hi.height,0,0,hi.width/r,hi.height/r);
   }
 };
 window.exhibitionDisplay=exhibitionDisplay;
