@@ -7,6 +7,15 @@ import sys
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # Explicit types also work on Windows machines without font/WASM MIME entries.
+    extensions_map = {
+        **SimpleHTTPRequestHandler.extensions_map,
+        '.wasm': 'application/wasm',
+        '.woff2': 'font/woff2',
+        '.tflite': 'application/octet-stream',
+        '.data': 'application/octet-stream',
+    }
+
     def do_GET(self):
         if self.path == '/__exhibition_health':
             data = b'chicken-pixel-tv3'

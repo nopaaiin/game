@@ -4,3 +4,4 @@ __pycache__/
 tmp/
 .kiosk-profile*/
 *.log
+dist/

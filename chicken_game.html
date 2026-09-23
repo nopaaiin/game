@@ -363,11 +363,25 @@ function bg(key,veil){
   // Background alignment stays fixed during catch/slice screen shake.
   ctx.save();ctx.setTransform(1,0,0,1,0,0);paintKitchenBackdrop(ctx);ctx.restore();
 }
+function roundedRect(x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
+}
+function panelRadius(h){return h<64?10:16;}
 function panel(x,y,w,h,fill=OVEN.panel,edge=OVEN.line){
   x=R(x);y=R(y);w=R(w);h=R(h);
-  // A single-pixel edge and stepped corners keep the pixel identity without stacked frames.
-  ctx.fillStyle=edge;ctx.fillRect(x+2,y,w-4,h);ctx.fillRect(x,y+2,w,h-4);
-  ctx.fillStyle=fill;ctx.fillRect(x+2,y+1,w-4,h-2);ctx.fillRect(x+1,y+2,w-2,h-4);
+  const r=panelRadius(h);
+  ctx.fillStyle=edge;roundedRect(x,y,w,h,r);ctx.fill();
+  ctx.fillStyle=fill;roundedRect(x+1,y+1,w-2,h-2,r-1);ctx.fill();
+}
+function panelStripe(x,y,w,h,offset,height,col=OVEN.red){
+  // Clip colour bands to the same curve so no square corner sticks out of a card.
+  ctx.save();roundedRect(x+1,y+1,w-2,h-2,panelRadius(h)-1);ctx.clip();
+  ctx.fillStyle=col;ctx.fillRect(x+1,y+offset,w-2,height);ctx.restore();
 }
 function bar(x,y,w,h,v,col=OVEN.red,back=OVEN.ink){
   x=R(x);y=R(y);
@@ -377,7 +391,7 @@ function bar(x,y,w,h,v,col=OVEN.red,back=OVEN.ink){
 function stepRail(active=-1,y=325){
   ['담기','썰기','굽기'].forEach((name,i)=>{
     const x=47+i*94;
-    ctx.fillStyle=active===i?OVEN.paper:OVEN.red;ctx.fillRect(x,y-9,18,18);
+    ctx.fillStyle=active===i?OVEN.paper:OVEN.red;roundedRect(x,y-9,18,18,4);ctx.fill();
     label(String(i+1),x+9,y,16,active===i?OVEN.red:OVEN.paper);
     label(name,x+26,y,16,active<0||active===i?OVEN.paper:OVEN.muted,'left');
   });
@@ -767,14 +781,14 @@ function drawBowlHint(){
 function drawHud(){
   const st=game.stage,left=Math.max(0,st.TIME-st.elapsed);
   panel(73,60,214,62,OVEN.panel,OVEN.deepRed);
-  ctx.fillStyle=OVEN.red;ctx.fillRect(74,61,212,21);
+  panelStripe(73,60,214,62,1,21);
   label('0'+st.no+'  '+st.name,84,72,16,OVEN.paper,'left');
   label(Math.ceil(left)+'초',276,72,16,OVEN.paper,'right');
   label(String(st.score).padStart(5,'0'),84,103,32,OVEN.paper,'left');
   const progress=st.GOAL!==undefined?(st===Stage1?st.caught:st.cut)+' / '+st.GOAL:R(st.cook*100)+'%';
   label(progress,276,98,16,OVEN.paper,'right');
   bar(194,111,82,4,st.progress(),OVEN.red);
-  bar(74,120,212,2,left/st.TIME,left<10?OVEN.amber:OVEN.red);
+  bar(84,117,192,2,left/st.TIME,left<10?OVEN.amber:OVEN.red);
 }
 function drawAttract(t){
   bg('bg2','rgba(15,10,14,.42)');
@@ -806,7 +820,7 @@ function drawIntro(t){
   const lift=R(Math.max(0,1-k*4)*14);
   stepRail(st.no-1,164);
   panel(30,200+lift,GW-60,186,OVEN.panel,OVEN.deepRed);
-  ctx.fillStyle=OVEN.red;ctx.fillRect(31,202+lift,GW-62,103);
+  panelStripe(30,200+lift,GW-60,186,2,103);
   label('STAGE 0'+st.no,GW/2,223+lift,16,OVEN.paper);
   label(st.name,GW/2,267+lift,48,OVEN.paper);
   label(st.howto[0],GW/2,333+lift,16,OVEN.paper);
@@ -819,7 +833,7 @@ function drawIntro(t){
 function drawPause(t){
   paintSceneVeil(ctx);
   panel(34,230,GW-68,164,OVEN.panel,OVEN.deepRed);
-  ctx.fillStyle=OVEN.red;ctx.fillRect(35,232,GW-70,52);
+  panelStripe(34,230,GW-68,164,2,52);
   label('잠깐 멈춤',GW/2,258,32,OVEN.paper);
   label('손이 안 보여요',GW/2,310,16,OVEN.paper);
   label('다시 보여 주면 이어서 해요',GW/2,339,16,OVEN.muted);
@@ -832,7 +846,7 @@ function drawClear(t){
   paintSceneVeil(ctx);
   const lift=R(Math.max(0,1-k*5)*8);
   panel(40,220+lift,GW-80,168,OVEN.panel,OVEN.deepRed);
-  ctx.fillStyle=OVEN.red;ctx.fillRect(41,222+lift,GW-82,64);
+  panelStripe(40,220+lift,GW-80,168,2,64);
   label(last.kind==='clear'?'성공!':'시간 종료',GW/2,256+lift,32,OVEN.paper);
   label(last.name+' 점수',GW/2,308+lift,16,OVEN.muted);
   label(String(last.score),GW/2,338+lift,32,OVEN.paper);
@@ -855,7 +869,7 @@ function drawResult(t){
     label(r.kind==='clear'?'성공':'시간 종료',165,y,16,r.kind==='clear'?OVEN.green:OVEN.amber,'left');
     label(String(r.score),300,y,16,OVEN.paper,'right');
   });
-  ctx.fillStyle=OVEN.red;ctx.fillRect(41,427,GW-82,51);
+  panelStripe(40,300,GW-80,180,127,51);
   label('합계',60,453,16,OVEN.paper,'left');
   if(k>1.5) label(String(game.total),300,453,32,OVEN.paper,'right');
   if(k>2.0){

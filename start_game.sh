@@ -43,7 +43,7 @@ PY
   sleep .1
 done
 if [ "$READY" != 1 ]; then echo "서버 시작 시간을 초과했습니다."; exit 1; fi
-URL="http://127.0.0.1:$PORT/chicken_game.html?camera=$CAMERA"
+URL="http://127.0.0.1:$PORT/chicken_game.html?display=tv3&camera=$CAMERA"
 echo "3번 TV 전용 · 종료: Command + Q"
 echo "운영자: 첫 설치 시 macOS 카메라 접근을 허용하고 TV를 세로 방향으로 설정해 주세요."
 "$CHROME" \

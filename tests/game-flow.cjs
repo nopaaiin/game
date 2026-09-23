@@ -18,7 +18,8 @@ const ctx=new Proxy({drawImage(...args){record.push(args);},measureText(t){retur
   {get:(obj,key)=>key in obj?obj[key]:noop,set:(obj,key,value)=>(obj[key]=value,true)});
 function element(){return {width:360,height:640,style:{setProperty:noop},classList:{toggle:noop},dataset:{},textContent:'',
   getContext:()=>ctx,addEventListener:noop,prepend:noop,setAttribute(k,v){this[k]=v;},getAttribute(k){return this[k];},
-  getBoundingClientRect:()=>({left:0,top:0,width:1080,height:1920})};}
+  getBoundingClientRect(){return{left:parseFloat(this.style.left)||0,top:parseFloat(this.style.top)||0,
+    width:parseFloat(this.style.width)||1080,height:parseFloat(this.style.height)||1920};}};}
 const elements=new Map();
 class ImageStub{constructor(){this.width=34;this.height=64;}set src(v){this.name=v;if(v.includes('bowl')){this.width=128;this.height=54;}this.onload?.();}}
 const sandbox={console,URLSearchParams,Math:math,Image:ImageStub,Path2D:class{moveTo(){}lineTo(){}closePath(){}rect(){}addPath(){}},
@@ -44,6 +45,26 @@ function advance(seconds,bot=true){for(let i=0;i<Math.ceil(seconds*60);i++){
   const profiles=JSON.parse(fs.readFileSync(path.join(root,'display-config.json'),'utf8')).profiles;
   assert.deepEqual(Object.keys(profiles),['3'],'Unexpected second TV configuration');
   assert.equal(profiles['3'].polygonMm.length,24);
+  // Plain HTML/file opens used to stretch a portrait scene across a wide window.
+  assert.equal(run('exhibitionDisplay.preview'),true,'Ordinary opens must show the arch');
+  for(const [width,height,dpr] of [[1574,1546,1],[1920,1080,1],[360,800,2],[1280,720,1.25],[1080,1920,1],[2160,3840,1]]){
+    run(`innerWidth=${width};innerHeight=${height};devicePixelRatio=${dpr};exhibitionDisplay.resize()`);
+    const m=run('exhibitionDisplay.matrix');
+    assert.equal(m.sx,m.sy,'Characters or logo stretch with the window');
+    assert.ok(m.x>=0&&m.y>=0&&m.x+900*m.sx<=width*dpr+.01&&m.y+1573.405*m.sy<=height*dpr+.01,'Arch does not fit the window');
+    for(const [x,y] of [[0,0],[180,320],[360,640]]){
+      const point=run(`exhibitionDisplay.clientToGame((exhibitionDisplay.matrix.x+(15+${x}*870/360)*exhibitionDisplay.matrix.sx)/${dpr},(exhibitionDisplay.matrix.y+(17+${y}*870/360)*exhibitionDisplay.matrix.sy)/${dpr})`);
+      assert.ok(Math.abs(point.x-x)<1e-8&&Math.abs(point.y-y)<1e-8,'Input mapping does not follow the fitted scene');
+    }
+  }
+  const adapter=fs.readFileSync(path.join(root,'display-profile.js'),'utf8').split('Promise.all([assetsReady')[0];
+  for(const [search,preview] of [['',true],['?display=tv3',false],['?display=tv3&preview=1',true]]){
+    const scope={Q:new URLSearchParams(search),window:{},render:noop,addEventListener:noop};
+    vm.createContext(scope);vm.runInContext(adapter,scope);
+    assert.equal(vm.runInContext('exhibitionDisplay.preview',scope),preview);
+  }
+  // Explicit installation mode still uses the original physical TV calibration.
+  run('exhibitionDisplay.preview=false;innerWidth=1080;innerHeight=1920;devicePixelRatio=1;exhibitionDisplay.resize()');
   assert.ok(Math.abs(run('exhibitionDisplay.matrix.x')-102.801*1080/1090)<1e-9);
   assert.ok(Math.abs(run('exhibitionDisplay.matrix.y')-311.595*1920/1905)<1e-9);
   run('innerWidth=2160;innerHeight=3840;exhibitionDisplay.resize()');

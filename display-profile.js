@@ -3,7 +3,8 @@
 const EMBEDDED_TV3_CONFIG={"source":"DDP H03 + CURVE01 / 2026.09.12 / TV3 / pages 5, 8, 13","bodyWidthMm":1090,"bodyHeightMm":1905,"profiles":{"3":{"label":"TV3","windowLeftMm":102.801,"windowTopMm":311.595,"windowWidthMm":900,"windowHeightMm":1573.405,"polygonMm":[[450.045,0.0],[520.433,4.971],[589.089,19.763],[654.32,44.01],[714.522,77.116],[768.211,118.267],[814.066,166.447],[850.958,220.471],[877.978,279.01],[894.46,340.621],[900.0,403.787],[900.0,1573.405],[0.0,1573.405],[0.0,403.787],[5.54,340.621],[22.022,279.01],[49.042,220.471],[85.934,166.447],[131.789,118.267],[185.478,77.116],[245.68,44.01],[310.911,19.763],[379.567,4.971],[449.955,0.0]],"cameraIndex":0,"activeHandArea":{"x0":0.14,"x1":0.86,"y0":0.1,"y1":0.9},"calibration":{"measured":false,"screenWidthMm":1090,"screenHeightMm":1905,"bezelLeftMm":0,"bezelTopMm":0,"offsetXmm":0,"offsetYmm":0}}}};
 // TV3 adapter. The original 360x640 scene is kept intact and enlarged with nearest-neighbour sampling.
 const exhibitionDisplay={
-  tv:'3',cameraIndex:0,profile:null,matrix:null,preview:Q.get('preview')==='1',guides:Q.get('calibrate')==='1',
+  tv:'3',cameraIndex:0,profile:null,matrix:null,
+  preview:Q.get('display')!=='tv3'||Q.get('preview')==='1',guides:Q.get('calibrate')==='1',
   world:{x:15,y:17,scale:870/360},width:900,height:1573.405,
   async init(){
     let cfg;
@@ -27,16 +28,22 @@ const exhibitionDisplay={
     const dpr=Math.min(devicePixelRatio||1,2),c=this.profile.calibration,p=this.profile,w=this.world;
     this.view.width=Math.round(innerWidth*dpr);this.view.height=Math.round(innerHeight*dpr);
     const value=(key,fallback)=>{const n=Number(Q.get(key));return Q.has(key)&&Number.isFinite(n)?n:fallback;};
-    const previewWidth=this.preview?Math.min(this.view.width,this.view.height*9/16):this.view.width;
-    const previewHeight=this.preview?previewWidth*16/9:this.view.height;
-    const sx=previewWidth/Math.max(1,value('screenWidth',c.screenWidthMm));
-    const sy=previewHeight/Math.max(1,value('screenHeight',c.screenHeightMm));
-    this.matrix={sx,sy,x:(this.view.width-previewWidth)/2+(p.windowLeftMm-value('bezelLeft',c.bezelLeftMm)+value('offsetX',c.offsetXmm))*sx,
-      y:(this.view.height-previewHeight)/2+(p.windowTopMm-value('bezelTop',c.bezelTopMm)+value('offsetY',c.offsetYmm))*sy,dpr};
+    if(this.preview){
+      // Ordinary browser/file opens show the whole arch, with one uniform scale.
+      // Calibration offsets only belong to the explicitly selected physical TV mode.
+      const padding=12*dpr;
+      const scale=Math.min(Math.max(1,this.view.width-padding*2)/this.width,Math.max(1,this.view.height-padding*2)/this.height);
+      this.matrix={sx:scale,sy:scale,x:(this.view.width-this.width*scale)/2,y:(this.view.height-this.height*scale)/2,dpr};
+    }else{
+      const sx=this.view.width/Math.max(1,value('screenWidth',c.screenWidthMm));
+      const sy=this.view.height/Math.max(1,value('screenHeight',c.screenHeightMm));
+      this.matrix={sx,sy,x:(p.windowLeftMm-value('bezelLeft',c.bezelLeftMm)+value('offsetX',c.offsetXmm))*sx,
+        y:(p.windowTopMm-value('bezelTop',c.bezelTopMm)+value('offsetY',c.offsetYmm))*sy,dpr};
+    }
     const m=this.matrix,stage=document.getElementById('stage');
-    Object.assign(stage.style,{left:(m.x+w.x*sx)/dpr+'px',top:(m.y+w.y*sy)/dpr+'px',
-      width:GW*w.scale*sx/dpr+'px',height:GH*w.scale*sy/dpr+'px'});
-    stage.style.setProperty('--u',w.scale*sx/dpr+'px');
+    Object.assign(stage.style,{left:(m.x+w.x*m.sx)/dpr+'px',top:(m.y+w.y*m.sy)/dpr+'px',
+      width:GW*w.scale*m.sx/dpr+'px',height:GH*w.scale*m.sy/dpr+'px'});
+    stage.style.setProperty('--u',w.scale*m.sx/dpr+'px');
     this.output.imageSmoothingEnabled=false;
   },
   clientToGame(x,y){const r=document.getElementById('stage').getBoundingClientRect();return{x:(x-r.left)/r.width*GW,y:(y-r.top)/r.height*GH};},

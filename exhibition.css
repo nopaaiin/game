@@ -4,5 +4,5 @@ html,body,#wrap{background:#160b0e}
 #tv3View{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
 #stage{position:absolute;box-shadow:none;overflow:visible}
 #game{visibility:hidden}
-#camBox{width:calc(52*var(--u));height:calc(39*var(--u));right:calc(8*var(--u));bottom:calc(4*var(--u));border:calc(1*var(--u)) solid #a91924;box-shadow:none}
+#camBox{width:calc(52*var(--u));height:calc(39*var(--u));right:calc(8*var(--u));bottom:calc(4*var(--u));border:calc(1*var(--u)) solid #a91924;border-radius:calc(5*var(--u));box-shadow:none}
 body.hide-camera #camBox{display:none}
