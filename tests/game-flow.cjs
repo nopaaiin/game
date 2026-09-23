@@ -4,7 +4,8 @@ const root=path.resolve(__dirname,'..');
 const html=fs.readFileSync(path.join(root,'chicken_game.html'),'utf8');
 const source=html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
 const old=fs.readFileSync(path.join(root,'backups/chicken_game.before-exhibition.html'),'utf8');
-for(let i=1;i<=3;i++){
+// Stage 1 (even drop lanes) and Stage 2 (continuous knife trail) were intentionally tuned for the TV.
+for(const i of [3]){
   const extract=s=>s.split(`const Stage${i} = {`)[1].split('  draw(){')[0];
   assert.equal(extract(html),extract(old),`Stage ${i} gameplay/scoring was changed`);
 }

@@ -177,22 +177,34 @@ const hand = {
   seenAt:-1e9, lostAt:0, firstSeenAt:0,
   samples:[],        // 썰기용 최근 경로 [{x,y,t}]
   fx:new OneEuro(1.4,0.008), fy:new OneEuro(1.4,0.008),
-  lm:null,
+  lm:null, bx:GW/2, by:GH*0.7, vx:0, vy:0, rawX:null, rawY:null,
 };
+// 감지가 잠깐 끊겨도(빠른 손의 흔들림) 손을 잃은 것으로 보지 않는 시간
+const HAND_GRACE=0.3;
 // 카메라 가장자리까지 손을 뻗지 않아도 화면 끝에 닿도록 중앙 영역만 사용
 const ACTIVE = {x0:0.14,x1:0.86,y0:0.10,y1:0.90};
 function feedHand(nx, ny, size, t){
   let gx=(nx-ACTIVE.x0)/(ACTIVE.x1-ACTIVE.x0), gy=(ny-ACTIVE.y0)/(ACTIVE.y1-ACTIVE.y0);
   gx=Math.max(0,Math.min(1,gx))*GW; gy=Math.max(0,Math.min(1,gy))*GH;
-  if(!hand.visible){ hand.fx.reset(); hand.fy.reset(); hand.firstSeenAt=t; hand.samples.length=0; }
-  hand.x=hand.fx.f(gx,t); hand.y=hand.fy.f(gy,t); hand.size=size;
+  const fresh=!hand.visible;
+  if(fresh){ hand.fx.reset(); hand.fy.reset(); hand.firstSeenAt=t; hand.samples.length=0; hand.vx=hand.vy=0; }
+  const px=hand.bx, py=hand.by, pdt=t-hand.seenAt;
+  hand.x=hand.bx=hand.fx.f(gx,t); hand.y=hand.by=hand.fy.f(gy,t); hand.size=size;
+  // 다음 감지까지 화면 프레임 사이를 이어 주는 속도 (뚝뚝 끊김 완화)
+  if(!fresh&&pdt>1e-3&&pdt<0.25){ hand.vx=hand.vx*.4+(hand.bx-px)/pdt*.6; hand.vy=hand.vy*.4+(hand.by-py)/pdt*.6; }
   hand.visible=true; hand.seenAt=t;
   if(SIM||BOT) hand.openPalm=true;
   hand.samples.push({x:hand.x,y:hand.y,t});
   while(hand.samples.length && t-hand.samples[0].t>0.4) hand.samples.shift();
 }
+// 감지 사이 프레임에서는 최근 속도로 조금만 앞질러 그린다 (최대 70ms).
+function predictHand(t){
+  if(!hand.visible||SIM||BOT)return;
+  const k=Math.min(Math.max(0,t-hand.seenAt),0.07);
+  hand.x=clamp(hand.bx+hand.vx*k,0,GW); hand.y=clamp(hand.by+hand.vy*k,0,GH);
+}
 function markNoHand(t){
-  if(hand.visible && t-hand.seenAt>0.18){ hand.visible=false; hand.openPalm=false; hand.lostAt=t; hand.lm=null; }
+  if(hand.visible && t-hand.seenAt>HAND_GRACE){ hand.visible=false; hand.openPalm=false; hand.lostAt=t; hand.lm=null; }
 }
 const now = ()=>performance.now()/1000;
 
@@ -241,16 +253,18 @@ async function startCamera(){
 function initHands(){
   if(typeof Hands==='undefined'){cameraState='error';showErr('손 인식을 준비하고 있어요 · 운영자에게 알려 주세요');return;}
   handsModel=new Hands({locateFile:f=>'lib/mediapipe/'+f});
-  handsModel.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.6,minTrackingConfidence:0.5});
+  // 가벼운 모델(0)로 초당 감지 횟수를 늘리고, 두 손까지 찾아서 한 사람의 손만 따라간다.
+  handsModel.setOptions({maxNumHands:2,modelComplexity:0,minDetectionConfidence:0.55,minTrackingConfidence:0.35});
   handsModel.onResults(r=>{
     modelOK=true;
     if(cameraState==='tracking-error'){cameraState='ready';showErr('');}
     const t=now();
     const lms=r.multiHandLandmarks;
     if(lms&&lms.length){
-      const lm=lms[0];
+      const lm=pickHand(lms,t);
       // 손바닥 중심(0,5,9,17) 60% + 검지 끝 40% : 흔들림은 적고 반응은 빠르게
       const px=(lm[0].x+lm[5].x+lm[9].x+lm[17].x)/4, py=(lm[0].y+lm[5].y+lm[9].y+lm[17].y)/4;
+      hand.rawX=px; hand.rawY=py;
       const nx=1-(px*0.6+lm[8].x*0.4), ny=py*0.6+lm[8].y*0.4;
       const size=Math.hypot(lm[0].x-lm[9].x,lm[0].y-lm[9].y);
       hand.lm=lm; feedHand(nx,ny,size,t);
@@ -258,6 +272,19 @@ function initHands(){
       hand.openPalm=[[8,6],[12,10],[16,14],[20,18]].filter(([tip,pip])=>distance(tip,0)>distance(pip,0)*1.15).length>=3;
     }else markNoHand(t);
   });
+}
+// 여러 손이 보일 때: 지금 따라가던 손(가장 가까운 위치)을 유지하고,
+// 새로 잡을 때는 카메라에 가장 가까운(가장 크게 보이는) 손을 고른다.
+function pickHand(lms,t){
+  if(lms.length===1)return lms[0];
+  const center=lm=>[(lm[0].x+lm[5].x+lm[9].x+lm[17].x)/4,(lm[0].y+lm[5].y+lm[9].y+lm[17].y)/4];
+  if(hand.visible&&hand.rawX!==null&&t-hand.seenAt<0.6){
+    let best=lms[0],bd=1e9;
+    for(const lm of lms){const [x,y]=center(lm),d=Math.hypot(x-hand.rawX,y-hand.rawY);if(d<bd){bd=d;best=lm;}}
+    return best;
+  }
+  const size=lm=>Math.hypot(lm[0].x-lm[9].x,lm[0].y-lm[9].y);
+  return lms.reduce((a,b)=>size(b)>size(a)?b:a);
 }
 async function camLoop(){
   if(!SIM && !BOT){
@@ -446,14 +473,20 @@ const Stage1 = {
   howto:['손을 좌우로 움직여','떨어지는 재료를 그릇으로 받아요'],
   init(){
     this.caught=0; this.score=0; this.items=[]; this.pile=[]; this.streak=0;
-    this.bowlX=GW/2; this.spawnIn=0.6; this.lastX=GW/2; this.elapsed=0; this.bag=[];
+    this.bowlX=GW/2; this.spawnIn=0.6; this.lastX=GW/2; this.elapsed=0; this.bag=[]; this.lanes=[]; this.lastLane=-1;
   },
   progress(){return this.caught/this.GOAL;},
   BOWL_Y:560, MOUTH:66, CATCH_HALF:58,
   nextKey(){if(!this.bag.length)this.bag=[...FOODS].sort(()=>Math.random()-.5);return this.bag.pop();},
   spawn(){
     const p=this.progress();
-    const x=clamp(this.lastX+rnd(-150,150),44,GW-44); this.lastX=x;
+    // 5칸을 섞어서 차례로 쓰기: 한쪽으로 몰리지 않고 화면 전체에 고르게 떨어진다.
+    if(!this.lanes||!this.lanes.length){
+      this.lanes=[0,1,2,3,4].sort(()=>Math.random()-.5);
+      if(this.lanes[this.lanes.length-1]===this.lastLane) this.lanes.reverse();
+    }
+    const lane=this.lanes.pop(); this.lastLane=lane;
+    const x=R(44+(lane+rnd(.15,.85))/5*(GW-88)); this.lastX=x;
     this.items.push({key:this.nextKey(),x,y:-40,vy:rnd(165,185)+p*70,rot:rnd(-.3,.3),vr:rnd(-1.5,1.5),state:'fall',t:0});
   },
   update(dt){
@@ -494,8 +527,6 @@ const Stage1 = {
     for(const it of this.items){ if(it.state!=='fall')continue;
       const k=clamp(1-(mouthY-it.y)/mouthY,0,1), w=R(10+k*22);
       ctx.fillStyle=`rgba(30,18,38,${.15+k*.35})`; ctx.fillRect(R(it.x-w/2),R(mouthY+26),w,4);
-      ctx.fillStyle=`rgba(255,224,102,${.25+k*.5})`;
-      for(let yy=R(it.y+40);yy<mouthY+20;yy+=14) ctx.fillRect(R(it.x)-1,yy,2,6);
     }
     const bx=this.bowlX, by=this.BOWL_Y, b=img.bowl;
     // 원래 픽셀 그릇: 뒷면 → 모든 재료 → 앞 테두리. 입구 위의 재료는 유지.
@@ -553,7 +584,10 @@ const Stage2 = {
       const d=Math.hypot(b.x-a.x,b.y-a.y), sp=d/Math.max(1e-3,b.t-a.t);
       segs.push({a,b,sp,fast:sp>=this.SLASH}); }
     if(S.length) this.lastT=S[S.length-1].t;
-    for(const s of segs){ this.trail.push({x:s.b.x,y:s.b.y,fast:s.fast,life:.22}); }
+    for(const s of segs){
+      const n=Math.max(1,Math.min(12,Math.ceil(Math.hypot(s.b.x-s.a.x,s.b.y-s.a.y)/6)));
+      for(let i=1;i<=n;i++) this.trail.push({x:s.a.x+(s.b.x-s.a.x)*i/n,y:s.a.y+(s.b.y-s.a.y)*i/n,fast:s.fast,life:.22});
+    }
     for(const tr of this.trail) tr.life-=dt;
     this.trail=this.trail.filter(p=>p.life>0);
     // 판정
@@ -822,7 +856,7 @@ function drawIntro(t){
   const lift=R(Math.max(0,1-k*4)*14);
   stepRail(st.no-1,164);
   panel(30,200+lift,GW-60,186,OVEN.panel,OVEN.deepRed);
-  panelStripe(30,200+lift,GW-60,186,2,103);
+  panelStripe(30,200+lift,GW-60,186,1,104);
   label('STAGE 0'+st.no,GW/2,223+lift,16,OVEN.paper);
   label(st.name,GW/2,267+lift,48,OVEN.paper);
   label(st.howto[0],GW/2,333+lift,16,OVEN.paper);
@@ -835,7 +869,7 @@ function drawIntro(t){
 function drawPause(t){
   paintSceneVeil(ctx);
   panel(34,230,GW-68,164,OVEN.panel,OVEN.deepRed);
-  panelStripe(34,230,GW-68,164,2,52);
+  panelStripe(34,230,GW-68,164,1,53);
   label('잠깐 멈춤',GW/2,258,32,OVEN.paper);
   label('손이 안 보여요',GW/2,310,16,OVEN.paper);
   label('다시 보여 주면 이어서 해요',GW/2,339,16,OVEN.muted);
@@ -848,7 +882,7 @@ function drawClear(t){
   paintSceneVeil(ctx);
   const lift=R(Math.max(0,1-k*5)*8);
   panel(40,220+lift,GW-80,168,OVEN.panel,OVEN.deepRed);
-  panelStripe(40,220+lift,GW-80,168,2,64);
+  panelStripe(40,220+lift,GW-80,168,1,65);
   label(last.kind==='clear'?'성공!':'시간 종료',GW/2,256+lift,32,OVEN.paper);
   label(last.name+' 점수',GW/2,308+lift,16,OVEN.muted);
   label(String(last.score),GW/2,338+lift,32,OVEN.paper);
@@ -928,7 +962,7 @@ function frame(ms){
   const t=ms/1000; const dt=last===null?0:Math.min(0.05,t-last); last=t;
   game.t=t;
   if(BOT) botStep(dt);
-  if(!SIM&&!BOT) markNoHand(now());
+  if(!SIM&&!BOT){ markNoHand(now()); predictHand(now()); }
   update(dt);
   ctx.imageSmoothingEnabled=false;
   render();
