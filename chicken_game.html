@@ -232,7 +232,9 @@ async function startCamera(){
     camOK=false; cameraState='error';
     const message=e.message==='camera-missing'?'지정된 카메라가 연결되지 않았어요':
       e.name==='NotAllowedError'?'운영자가 카메라 권한을 설정하고 있어요':
-      '카메라 연결을 확인하고 있어요';
+      e.name==='NotReadableError'||e.name==='TrackStartError'?'카메라를 다른 창이나 프로그램이 쓰고 있어요\n다른 탭·앱을 닫아 주세요':
+      '카메라 연결을 확인하고 있어요 ('+(e.name||e.message||'unknown')+')';
+    console.error('[camera]',e);
     showErr(message); cameraRetry=setTimeout(startCamera,4000);
   }finally{cameraStarting=false;}
 }
