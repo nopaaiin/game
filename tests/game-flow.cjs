@@ -104,7 +104,7 @@ function advance(seconds,bot=true){for(let i=0;i<Math.ceil(seconds*60);i++){
   record=[];run('Stage1.draw()');
   const back=record.findIndex(a=>a[0].name==='px/bowl.png'&&a.length===3);
   const front=record.findIndex(a=>a[0].name==='px/bowl.png'&&a.length===9);
-  const foodCalls=record.map((a,i)=>/px\/(chicken|green)\.png/.test(a[0].name)?i:-1).filter(i=>i>=0);
+  const foodCalls=record.map((a,i)=>/px\/(hd\/)?(chicken|green)\.png/.test(a[0].name)?i:-1).filter(i=>i>=0);
   assert.ok(back>=0&&front>back&&foodCalls.every(i=>i>back&&i<front));
   const crop=record[front];assert.ok(crop[6]>=run('Stage1.BOWL_Y-Stage1.MOUTH/2+8'),'Lip covered above the catch line');
 

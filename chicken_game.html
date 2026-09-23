@@ -79,11 +79,13 @@ const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 const img = {};
-function load(name, src){
-  return new Promise(res=>{const i=new Image();i.onload=()=>{img[name]=i;res();};i.onerror=()=>{img[name]=null;res();};i.src=src;});
+function load(name, src, pxRes=1){
+  return new Promise(res=>{const i=new Image();i.onload=()=>{i.res=pxRes;img[name]=i;res();};i.onerror=()=>{img[name]=null;res();};i.src=src;});
 }
+// 재료 캐릭터는 2배 밀도 도트(px/hd). 화면 크기는 그대로, 도트만 촘촘하게.
+const imW=im=>im.width/(im.res||1), imH=im=>im.height/(im.res||1);
 const assetsReady = Promise.all([
-  load('chicken','px/chicken.png'), load('ricecake','px/ricecake.png'), load('green','px/green.png'),
+  load('chicken','px/hd/chicken.png',2), load('ricecake','px/hd/ricecake.png',2), load('green','px/hd/green.png',2),
   load('bowl','px/bowl.png'), load('bg1','px/bg1.png'), load('bg2','px/bg2.png'), load('bg3','px/bg3.png'),
   load('logo','assets/oven-sauna-white.png'),
   document.fonts ? document.fonts.load('16px NeoDunggeunmo') : null,
@@ -353,7 +355,7 @@ function label(s,x,y,size=16,col=OVEN.paper,align='center'){
 function sprite(key,x,y,scale=1,rot=0,alpha=1){
   const im=img[key]; if(!im)return;
   ctx.save(); ctx.globalAlpha=alpha; ctx.translate(R(x),R(y)); if(rot)ctx.rotate(rot);
-  const w=im.width*scale,h=im.height*scale; ctx.drawImage(im,R(-w/2),R(-h/2),R(w),R(h)); ctx.restore();
+  const w=imW(im)*scale,h=imH(im)*scale; ctx.drawImage(im,R(-w/2),R(-h/2),R(w),R(h)); ctx.restore();
 }
 // One shared background transform for both the scene and the TV's surrounding bleed.
 // Overscan raises the existing artwork and keeps ceiling/cabinet frames off the arch seam.
@@ -624,7 +626,7 @@ const Stage2 = {
       ctx.save(); ctx.globalAlpha=clamp(h.life/.4,0,1);
       ctx.translate(R(h.x),R(h.y));
       ctx.rotate(h.ang); ctx.beginPath(); ctx.rect(-80,h.side<0?-80:0,160,80); ctx.rotate(-h.ang); ctx.clip();
-      ctx.rotate(h.rot); ctx.drawImage(im,R(-im.width/2),R(-im.height/2)); ctx.restore();
+      ctx.rotate(h.rot); ctx.drawImage(im,R(-imW(im)/2),R(-imH(im)/2),R(imW(im)),R(imH(im))); ctx.restore();
     }
     drawFx();
     // 칼 궤적 (픽셀 사각형)
@@ -699,7 +701,7 @@ const Stage3 = {
     if(chk){
       const off=getTint(chk,this.cook), s=1.5;
       const bob=this.inBand?R(Math.sin(this.elapsed*14)*1):0;
-      ctx.drawImage(off,R(cx-chk.width*s/2),R(452-chk.height*s/2)+bob,R(chk.width*s),R(chk.height*s));
+      ctx.drawImage(off,R(cx-imW(chk)*s/2),R(452-imH(chk)*s/2)+bob,R(imW(chk)*s),R(imH(chk)*s));
     }
     panel(40,505,280,95);
     bar(60,521,240,6,this.cook,this.inBand?'#7dff8a':OVEN.red);
@@ -893,7 +895,7 @@ function drawResult(t){
   bg('bg3','rgba(30,5,10,.52)');
   panel(30,82,GW-60,60,OVEN.red,OVEN.red);
   label('치킨 완성!',GW/2,112,32,OVEN.paper);
-  const chk=img.chicken; if(chk){ const s=2; ctx.drawImage(getTint(chk,1),R(GW/2-chk.width*s/2),R(220-chk.height*s/2+Math.sin(t*4)*4),chk.width*s,chk.height*s); }
+  const chk=img.chicken; if(chk){ const s=2; ctx.drawImage(getTint(chk,1),R(GW/2-imW(chk)*s/2),R(220-imH(chk)*s/2+Math.sin(t*4)*4),imW(chk)*s,imH(chk)*s); }
   if(((t*6)|0)%3===0) burst(GW/2+rnd(-60,60),220+rnd(-30,30),[OVEN.red,OVEN.paper,OVEN.amber],2,120);
   drawFx();
   panel(40,300,GW-80,180,OVEN.panel,OVEN.deepRed);
