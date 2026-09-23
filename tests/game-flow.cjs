@@ -8,10 +8,13 @@ for(let i=1;i<=3;i++){
   const extract=s=>s.split(`const Stage${i} = {`)[1].split('  draw(){')[0];
   assert.equal(extract(html),extract(old),`Stage ${i} gameplay/scoring was changed`);
 }
-let time=1000,seed=7,jobs=[],record=[];
+let time=1000,seed=7,jobs=[],record=[],fills=[],textCalls=[];
 const math=Object.create(Math);math.random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
 const noop=()=>{};
-const ctx=new Proxy({drawImage(...args){record.push(args);},measureText(t){return{width:t.length*8};}},
+const ctx=new Proxy({drawImage(...args){record.push(args);},measureText(t){return{width:t.length*8};},
+  fillRect(...args){fills.push({style:this.fillStyle,args});},
+  fillText(s,x,y){textCalls.push({s,x,y,font:this.font});},
+  createLinearGradient(){return{addColorStop:noop};}},
   {get:(obj,key)=>key in obj?obj[key]:noop,set:(obj,key,value)=>(obj[key]=value,true)});
 function element(){return {width:360,height:640,style:{setProperty:noop},classList:{toggle:noop},dataset:{},textContent:'',
   getContext:()=>ctx,addEventListener:noop,prepend:noop,setAttribute(k,v){this[k]=v;},getAttribute(k){return this[k];},
@@ -32,7 +35,7 @@ vm.runInContext(fs.readFileSync(path.join(root,'display-profile.js'),'utf8'),san
 const run=code=>vm.runInContext(code,sandbox);
 function advance(seconds,bot=true){for(let i=0;i<Math.ceil(seconds*60);i++){
   time+=1/60;const due=jobs.filter(j=>j.at<=time);jobs=jobs.filter(j=>j.at>time);due.forEach(j=>j.fn());
-  run(bot?`frame(${time*1000})`:`game.t=${time};update(1/60)`);record=[];
+  run(bot?`frame(${time*1000})`:`game.t=${time};update(1/60)`);record=[];fills=[];textCalls=[];
 }}
 (async()=>{
   for(let i=0;i<12;i++)await Promise.resolve();
@@ -109,6 +112,32 @@ function advance(seconds,bot=true){for(let i=0;i<Math.ceil(seconds*60);i++){
     const ax=w.x+px*w.scale,ay=w.y+py*w.scale;
     for(const [dx,dy] of [[-10,0],[10,0],[0,-10],[0,10]])assert.ok(inside(ax+dx,ay+dy),`Card clips the arch: ${[x,y,width,height]}`);
   }
+  // Native-size glyphs preserve all NeoDGM strokes on the 360px canvas.
+  assert.ok(textCalls.length>0);
+  for(const call of textCalls){
+    assert.match(call.font,/NeoDunggeunmo/,'A UI label uses the previous font');
+    assert.equal(parseInt(call.font)%16,0,`Text collapses the font pixel grid: ${call.s}`);
+  }
+  // Modal dimming must extend beyond the game canvas into the physical arch bleed.
+  const coversScene=fill=>fill.args[0]<=0&&fill.args[1]<=0&&fill.args[0]+fill.args[2]>=360&&fill.args[1]+fill.args[3]>=640;
+  for(const mode of ['intro','pause','clear']){
+    run(`game.mode='${mode}';game.stage=Stage3`);
+    fills=[];run('renderOriginalPixels()');const sceneVeil=fills.filter(coversScene).at(-1);
+    fills=[];run('exhibitionDisplay.present()');const bleedVeil=fills.filter(coversScene).at(-1);
+    assert.ok(sceneVeil&&typeof sceneVeil.style==='string'&&sceneVeil.style.startsWith('rgba('));
+    assert.deepEqual(bleedVeil,sceneVeil,`${mode}: bright seam between scene and arch`);
+  }
+  // The transparent logo stays proportional, under the arch and clear of the title.
+  for(const mode of ['attract','result']){
+    run(`game.mode='${mode}'`);record=[];run('exhibitionDisplay.present()');
+    const logo=record.find(a=>a[0].name==='assets/oven-sauna-white.png');
+    assert.ok(logo&&logo.length===9,'Supplied logo is missing');
+    assert.ok(Math.abs(logo[7]/logo[8]-logo[3]/logo[4])<1e-9,'Logo was stretched');
+    assert.ok(logo[6]+logo[8]<=78,'Logo overlaps title');
+    for(const x of [logo[5],logo[5]+logo[7]])for(const y of [logo[6],logo[6]+logo[8]]){
+      assert.ok(inside(w.x+x*w.scale,w.y+y*w.scale),'Logo clips the arch');
+    }
+  }
   for(const x of [0,360])for(const y of [0,640]){
     const p=run(`hand.x=${x};hand.y=${y};cursorPosition()`);
     for(let i=0;i<64;i++){const a=i*Math.PI/32;assert.ok(inside(w.x+(p.x+34*Math.cos(a))*w.scale,w.y+(p.y+34*Math.sin(a))*w.scale),'Hand/hold ring clips the arch');}
@@ -121,5 +150,5 @@ function advance(seconds,bot=true){for(let i=0;i<Math.ceil(seconds*60);i++){
   }
   record=[];run('hand.visible=true;hand.openPalm=true;game.holdStart=game.t-.8;drawAttract(game.t)');
   assert.equal(record.filter(a=>a[0]===run('CUR_HAND')).length,1,'A second live cursor covers the start instructions');
-  console.log('PASS: original stage rules; TV3 geometry/1080p/4K; palm hold; three stages; pause/resume/replay; bowl layers; continuous background for every scene; all cards and hand markers inside the H03 arch.');
+  console.log('PASS: original stage rules; TV3 geometry/1080p/4K; palm hold; three stages; pause/resume/replay; bowl layers; continuous modal/background bleed; NeoDGM pixel grid; logo proportions; all cards and hand markers inside the H03 arch.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

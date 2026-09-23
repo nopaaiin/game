@@ -47,20 +47,25 @@ const exhibitionDisplay={
       '스테이지 '+(game.stageIdx+1)+' '+(game.stage?.name||'')+' · '+game.mode+' · 점수 '+(game.stage?.score||0);
     if(this.view.getAttribute('aria-label')!==label){this.view.setAttribute('role','img');this.view.setAttribute('aria-label',label);}
     c.setTransform(1,0,0,1,0,0);c.imageSmoothingEnabled=false;
-    c.fillStyle='#140c1c';c.fillRect(0,0,this.view.width,this.view.height);
+    c.fillStyle=OVEN.ink;c.fillRect(0,0,this.view.width,this.view.height);
     c.setTransform(m.sx,0,0,m.sy,m.x,m.y);
     // Draw the current scene's exact background at the same origin and scale.
     // This fills the arch tip and side gutters without exposing a different stage.
-    c.save();c.translate(w.x,w.y);c.scale(w.scale,w.scale);paintKitchenBackdrop(c);c.restore();
+    c.save();c.translate(w.x,w.y);c.scale(w.scale,w.scale);
+    paintKitchenBackdrop(c);paintSceneVeil(c);c.restore();
     c.drawImage(cv,w.x,w.y,GW*w.scale,GH*w.scale);
+    // Render the supplied curved logo at display resolution, above the pixel scene.
+    if(game.mode==='attract'||game.mode==='result'){
+      c.save();c.translate(w.x,w.y);c.scale(w.scale,w.scale);drawBrandLogo(c);c.restore();
+    }
     if(this.preview){
       const mask=new Path2D();mask.rect(-m.x/m.sx-1,-m.y/m.sy-1,this.view.width/m.sx+2,this.view.height/m.sy+2);mask.addPath(this.path);
-      c.fillStyle='#140c1c';c.fill(mask,'evenodd');
+      c.fillStyle=OVEN.ink;c.fill(mask,'evenodd');
     }
     if(this.guides){
       c.save();c.strokeStyle='#ff6464';c.lineWidth=3;c.stroke(this.path);
       c.strokeStyle='#7dff8a';c.setLineDash([10,8]);c.strokeRect(25,422,850,1130);c.setLineDash([]);
-      c.fillStyle='#1e1226';c.fillRect(125,420,650,60);c.fillStyle='#ffe066';c.font='22px Galmuri';c.textAlign='center';
+      c.fillStyle='#1e1226';c.fillRect(125,420,650,60);c.fillStyle='#ffe066';c.font='32px NeoDunggeunmo';c.textAlign='center';
       c.fillText('TV3 · '+(this.profile.calibration.measured?'실측 적용':'본체 기준 · 실화면 보정 필요'),450,459);c.restore();
     }
   }
@@ -78,20 +83,20 @@ function drawGestureDemo(st,t){
   const phase=(t%1.7)/1.7;
   if(st===Stage1){
     const x=GW/2+Math.sin(t*2.5)*57;sprite('bowl',x,518,.65);
-    ctx.drawImage(CUR_HAND,R(x-12),542,24,21);text('←',95,543,16,'#ffe066');text('→',265,543,16,'#ffe066');
+    ctx.drawImage(CUR_HAND,R(x-12),542,24,21);label('←',95,543,32,OVEN.red);label('→',265,543,32,OVEN.red);
   }else if(st===Stage2){
     sprite('green',GW/2,518,.75,-.2);
     for(let i=0;i<6;i++){const k=clamp(phase-i*.03,0,1);ctx.fillStyle=`rgba(160,230,255,${1-i/6})`;ctx.fillRect(R(115+k*130),R(553-k*75),4,4);}
     ctx.drawImage(CUR_KNIFE,R(105+phase*130),R(540-phase*75),32,32);
   }else{
-    bar(94,515,172,8,.76,'#ffb13b');ctx.fillStyle='#7dff8a';ctx.fillRect(217,515,21,8);
+    bar(94,515,172,8,.76,OVEN.red);ctx.fillStyle='#7dff8a';ctx.fillRect(217,515,21,8);
     const x=R(225+Math.sin(t*2.5)*4);ctx.drawImage(CUR_HAND,x-12,536,24,21);
   }
 }
 const renderOriginalPixels=render;
 render=function(){
   renderOriginalPixels();
-  if(SIM||BOT)text(BOT?'자동 시연':'손동작 테스트',12,GH-12,8,'#d8cce8','left');
+  if(SIM||BOT)label(BOT?'자동 시연':'손동작 테스트',12,GH-12,16,OVEN.muted,'left');
   exhibitionDisplay.present();
 };
 Promise.all([assetsReady,exhibitionDisplay.init()]).then(()=>bootGame()).catch(error=>{

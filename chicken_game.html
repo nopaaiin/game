@@ -5,19 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>치킨 조리 게임</title>
 <style>
-  @font-face{font-family:'Galmuri';src:url('lib/font/galmuri11.woff2') format('woff2');font-display:block;}
-  @font-face{font-family:'GalmuriB';src:url('lib/font/galmuri11-bold.woff2') format('woff2');font-display:block;}
+  @font-face{font-family:'NeoDunggeunmo';src:url('lib/font/neodgm.woff2') format('woff2');font-weight:400;font-style:normal;font-display:block;}
   :root{--u:calc(min(100vh, 177.78vw) / 640);}
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{width:100%;height:100%;overflow:hidden;background:#140c1c;cursor:none;
-    font-family:'Galmuri','GalmuriB',monospace;-webkit-font-smoothing:none;user-select:none;}
+    font-family:'NeoDunggeunmo',monospace;font-synthesis:none;user-select:none;}
   #wrap{position:fixed;inset:0;display:grid;place-items:center;
     background:repeating-linear-gradient(45deg,#1b1026 0 12px,#170d21 12px 24px);}
   #stage{position:relative;width:calc(360*var(--u));height:calc(640*var(--u));overflow:hidden;
     box-shadow:0 0 0 calc(3*var(--u)) #000,0 0 0 calc(6*var(--u)) #3a2450,0 0 80px #000;}
   #game{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges;}
   #hud{position:absolute;inset:0;pointer-events:none;color:#fff;font-size:calc(11*var(--u));}
-  .px{font-family:'GalmuriB','Galmuri',monospace;text-shadow:
+  .px{font-family:'NeoDunggeunmo',monospace;text-shadow:
      calc(1*var(--u)) 0 #000,calc(-1*var(--u)) 0 #000,0 calc(1*var(--u)) #000,0 calc(-1*var(--u)) #000,
      calc(1*var(--u)) calc(1*var(--u)) #000,calc(2*var(--u)) calc(2*var(--u)) #000;}
   #camBox{position:absolute;right:calc(8*var(--u));bottom:calc(8*var(--u));width:calc(88*var(--u));height:calc(66*var(--u));
@@ -55,8 +54,11 @@ const GW = 360, GH = 640;                 // 게임 내부 해상도 (픽셀아�
 const Q = new URLSearchParams(location.search);
 const SIM = Q.get('sim') === '1';         // 마우스로 손 흉내 (테스트용)
 const BOT = Q.get('bot') === '1';         // 자동 플레이 (검증용)
-const FONT = "'GalmuriB','Galmuri',monospace";
-const OVEN = {orange:'#ff872e',red:'#d64329',amber:'#ffd084',muted:'#ffc6a2'};
+const FONT = "'NeoDunggeunmo',monospace";
+const OVEN = {
+  red:'#f21d27',deepRed:'#a91924',ink:'#160b0e',panel:'#291115',line:'#71312f',
+  paper:'#fff3df',muted:'#dbafa0',orange:'#ff8a3b',amber:'#ffd584',green:'#b9ed89',
+};
 
 const T = {
   START_HOLD: 1.6,      // 손을 이만큼 보여 주면 시작
@@ -83,8 +85,8 @@ function load(name, src){
 const assetsReady = Promise.all([
   load('chicken','px/chicken.png'), load('ricecake','px/ricecake.png'), load('green','px/green.png'),
   load('bowl','px/bowl.png'), load('bg1','px/bg1.png'), load('bg2','px/bg2.png'), load('bg3','px/bg3.png'),
-  document.fonts ? document.fonts.load('16px GalmuriB').catch(()=>{}) : null,
-  document.fonts ? document.fonts.load('16px Galmuri').catch(()=>{}) : null,
+  load('logo','assets/oven-sauna-white.png'),
+  document.fonts ? document.fonts.load('16px NeoDunggeunmo') : null,
 ]);
 const FOODS = ['chicken','ricecake','green'];
 const JUICE = { chicken:['#f7a043','#ffd08a','#b85a1c'], ricecake:['#ff2b2b','#ffffff','#a80f1e'], green:['#a8d443','#e7f5c4','#5b8a1f'] };
@@ -304,12 +306,20 @@ const R = Math.round;
 function rnd(a,b){return a+Math.random()*(b-a);}
 function clamp(v,a,b){return v<a?a:v>b?b:v;}
 function ease(k,dt){return 1-Math.exp(-k*dt);}
+// NeoDGM's native 16px grid stays intact; sub-16px Korean text loses strokes.
+function pixelFontSize(size){return Math.max(16,R(size/16)*16);}
 function text(s,x,y,size=16,col='#fff',align='center',outline='#1e1226',base='middle'){
+  size=pixelFontSize(size);
   ctx.font=`${size}px ${FONT}`; ctx.textAlign=align; ctx.textBaseline=base;
-  const o=Math.max(1,R(size/8));
+  const o=size>=32?2:1;
   ctx.fillStyle=outline;
   for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o],[o,o+o]]) ctx.fillText(s,R(x)+dx,R(y)+dy);
   ctx.fillStyle=col; ctx.fillText(s,R(x),R(y));
+}
+// Solid UI surfaces need no heavy outline; keep the original outlined text for play effects.
+function label(s,x,y,size=16,col=OVEN.paper,align='center'){
+  ctx.font=`${pixelFontSize(size)}px ${FONT}`;ctx.textAlign=align;ctx.textBaseline='middle';
+  ctx.fillStyle=col;ctx.fillText(s,R(x),R(y));
 }
 function sprite(key,x,y,scale=1,rot=0,alpha=1){
   const im=img[key]; if(!im)return;
@@ -318,53 +328,66 @@ function sprite(key,x,y,scale=1,rot=0,alpha=1){
 }
 // One shared background transform for both the scene and the TV's surrounding bleed.
 // Overscan raises the existing artwork and keeps ceiling/cabinet frames off the arch seam.
-const kitchenBackdrop={key:'bg2',veil:'rgba(28,11,20,.60)'};
+const kitchenBackdrop={key:'bg2',veil:'rgba(28,5,10,.52)'};
 const BACKDROP_Y={bg1:-48,bg2:-56,bg3:-80};
 function paintKitchenBackdrop(target){
   const {key,veil}=kitchenBackdrop,im=img[key];
-  target.fillStyle='#24131f';target.fillRect(-GW,-GH,GW*3,GH*3);
+  target.fillStyle=OVEN.ink;target.fillRect(-GW,-GH,GW*3,GH*3);
   if(im) target.drawImage(im,-27,BACKDROP_Y[key]??-48,414,736);
+  // Colour only the kitchen backdrop. Ingredient/bowl sprites retain their own palettes.
+  target.save();target.globalCompositeOperation='color';target.globalAlpha=key==='bg2'?.08:.20;
+  target.fillStyle=OVEN.red;target.fillRect(-GW,-GH,GW*3,GH*3);target.restore();
   if(veil){target.fillStyle=veil;target.fillRect(-GW,-GH,GW*3,GH*3);}
-  // 굽네 오븐사우나 무드: 상단은 아치가 프레임을 자르는 자리를 어둡게 눌러 자연스럽게 가리고,
-  // 하단과 좌우에는 오븐 열감(오렌지/빨강)을 더한다.
-  var gTop=target.createLinearGradient(0,-40,0,170);
-  gTop.addColorStop(0,'rgba(24,6,3,.80)');gTop.addColorStop(.55,'rgba(30,8,4,.30)');gTop.addColorStop(1,'rgba(0,0,0,0)');
-  target.fillStyle=gTop;target.fillRect(0,-40,GW,210);
-  var gBot=target.createLinearGradient(0,GH,0,GH-150);
-  gBot.addColorStop(0,'rgba(255,90,20,.30)');gBot.addColorStop(.5,'rgba(200,50,15,.12)');gBot.addColorStop(1,'rgba(0,0,0,0)');
-  target.fillStyle=gBot;target.fillRect(0,GH-150,GW,150);
-  var gL=target.createLinearGradient(0,0,60,0);
-  gL.addColorStop(0,'rgba(120,30,10,.28)');gL.addColorStop(1,'rgba(0,0,0,0)');
-  target.fillStyle=gL;target.fillRect(0,120,60,GH);
-  var gR=target.createLinearGradient(GW,0,GW-60,0);
-  gR.addColorStop(0,'rgba(120,30,10,.28)');gR.addColorStop(1,'rgba(0,0,0,0)');
-  target.fillStyle=gR;target.fillRect(GW-60,120,60,GH);
+  // Extend the lighting through the TV bleed, without a rectangular edge at the arch.
+  const shade=target.createLinearGradient(0,-40,0,GH);
+  shade.addColorStop(0,'rgba(15,4,8,.90)');shade.addColorStop(.35,'rgba(30,4,9,.08)');
+  shade.addColorStop(.72,'rgba(26,8,12,.15)');
+  shade.addColorStop(1,key==='bg2'?'rgba(82,12,20,.13)':'rgba(120,13,25,.20)');
+  target.fillStyle=shade;target.fillRect(-GW,-GH,GW*3,GH*3);
+}
+function paintSceneVeil(target){
+  const opacity=game.mode==='pause'?.78:['intro','clear'].includes(game.mode)?.72:0;
+  if(!opacity)return;
+  target.fillStyle=`rgba(16,4,8,${opacity})`;target.fillRect(-GW,-GH,GW*3,GH*3);
+}
+function drawBrandLogo(target){
+  if(!img.logo)return;
+  // Crop transparent padding only. Keep the supplied artwork unchanged and proportional.
+  const width=90,height=width*2380/3852;
+  target.save();target.imageSmoothingEnabled=true;target.imageSmoothingQuality='high';
+  target.drawImage(img.logo,324,1060,3852,2380,GW/2-width/2,18,width,height);
+  target.restore();
 }
 function bg(key,veil){
   kitchenBackdrop.key=key;kitchenBackdrop.veil=veil;
   // Background alignment stays fixed during catch/slice screen shake.
   ctx.save();ctx.setTransform(1,0,0,1,0,0);paintKitchenBackdrop(ctx);ctx.restore();
 }
-function panel(x,y,w,h,fill='#2a1838',edge=OVEN.orange){
+function panel(x,y,w,h,fill=OVEN.panel,edge=OVEN.line){
   x=R(x);y=R(y);w=R(w);h=R(h);
-  ctx.fillStyle='#1e1226';ctx.fillRect(x-4,y-2,w+8,h+4);ctx.fillRect(x-2,y-4,w+4,h+8);
-  ctx.fillStyle=edge;ctx.fillRect(x-2,y,w+4,h);ctx.fillRect(x,y-2,w,h+4);
-  ctx.fillStyle=fill;ctx.fillRect(x,y,w,h);
-  ctx.fillStyle='rgba(255,151,76,.24)';ctx.fillRect(x,y,w,3);
-  ctx.fillStyle=OVEN.red;ctx.fillRect(x+4,y+h-2,w-8,2);
+  // A single-pixel edge and stepped corners keep the pixel identity without stacked frames.
+  ctx.fillStyle=edge;ctx.fillRect(x+2,y,w-4,h);ctx.fillRect(x,y+2,w,h-4);
+  ctx.fillStyle=fill;ctx.fillRect(x+2,y+1,w-4,h-2);ctx.fillRect(x+1,y+2,w-2,h-4);
 }
-function bar(x,y,w,h,v,col='#7dff8a',back='#1e1226'){
-  x=R(x);y=R(y);ctx.fillStyle='#1e1226';ctx.fillRect(x-2,y-2,w+4,h+4);
+function bar(x,y,w,h,v,col=OVEN.red,back=OVEN.ink){
+  x=R(x);y=R(y);
   ctx.fillStyle=back;ctx.fillRect(x,y,w,h);
   ctx.fillStyle=col;ctx.fillRect(x,y,R(w*clamp(v,0,1)),h);
-  ctx.fillStyle='rgba(255,255,255,.25)';ctx.fillRect(x,y,R(w*clamp(v,0,1)),2);
+}
+function stepRail(active=-1,y=325){
+  ['담기','썰기','굽기'].forEach((name,i)=>{
+    const x=47+i*94;
+    ctx.fillStyle=active===i?OVEN.paper:OVEN.red;ctx.fillRect(x,y-9,18,18);
+    label(String(i+1),x+9,y,16,active===i?OVEN.red:OVEN.paper);
+    label(name,x+26,y,16,active<0||active===i?OVEN.paper:OVEN.muted,'left');
+  });
 }
 // 픽셀 원(링) 게이지
 function pixelRing(cx,cy,r,v,col,thick=3){
   const n=Math.max(12,R(r*2.2));
   for(let i=0;i<n;i++){
     const a=-Math.PI/2+i/n*Math.PI*2;
-    ctx.fillStyle=i/n<v?col:'rgba(30,18,38,.7)';
+    ctx.fillStyle=i/n<v?col:'rgba(104,32,34,.75)';
     ctx.fillRect(R(cx+Math.cos(a)*r-thick/2),R(cy+Math.sin(a)*r-thick/2),thick,thick);
   }
 }
@@ -449,7 +472,7 @@ const Stage1 = {
   },
   bonus(result){return result==='clear'?R((this.TIME-this.elapsed)*10):0;},
   draw(){
-    bg('bg1','rgba(120,30,10,.34)');
+    bg('bg1','rgba(30,5,10,.44)');
     const mouthY=this.BOWL_Y-this.MOUTH/2+8;
     // 떨어질 위치 미리보기 (그릇 높이에 그림자)
     for(const it of this.items){ if(it.state!=='fall')continue;
@@ -543,7 +566,7 @@ const Stage2 = {
   },
   bonus(result){return result==='clear'?R((this.TIME-this.elapsed)*10):0;},
   draw(){
-    bg('bg2','rgba(70,18,20,.42)');
+    bg('bg2','rgba(15,10,14,.42)');
     for(const o of this.objs) sprite(o.key,o.x,o.y,1,o.rot);
     // 반쪽: 벤 방향에 수직으로 잘라서 벌어지게
     for(const h of this.halves){
@@ -599,7 +622,7 @@ const Stage3 = {
   },
   bonus(){return 0;},
   draw(){
-    bg('bg3','rgba(40,10,0,.30)');
+    bg('bg3','rgba(30,5,10,.42)');
     const cx=GW/2, cy=250, r=92;
     const A0=Math.PI*0.75, A1=Math.PI*2.25, ang=v=>A0+v/this.MAXT*(A1-A0);
     // 게이지 링 (픽셀 블록)
@@ -607,20 +630,20 @@ const Stage3 = {
     for(let i=0;i<=N;i++){
       const v=i/N*this.MAXT, a=ang(v), inb=v>=this.LO&&v<=this.HI;
       const on=v<=this.temp;
-      const col=inb?(on?'#7dff8a':'#2f7a3a'):(on?(v>this.HI?'#ff5a3c':'#ffb13b'):'#3a2a3a');
+      const col=inb?(on?'#7dff8a':'#2f7a3a'):(on?(v>this.HI?OVEN.red:OVEN.orange):OVEN.line);
       const s=inb?8:6;
       ctx.fillStyle='#1e1226';ctx.fillRect(R(cx+Math.cos(a)*r-s/2-1),R(cy+Math.sin(a)*r-s/2-1),s+2,s+2);
       ctx.fillStyle=col;ctx.fillRect(R(cx+Math.cos(a)*r-s/2),R(cy+Math.sin(a)*r-s/2),s,s);
     }
     // 노브
-    ctx.fillStyle='#1e1226'; pixelDisc(cx,cy,64); ctx.fillStyle='#57342d'; pixelDisc(cx,cy,60);
-    ctx.fillStyle='#352025'; pixelDisc(cx,cy,48);
+    ctx.fillStyle=OVEN.ink;pixelDisc(cx,cy,64);ctx.fillStyle=OVEN.red;pixelDisc(cx,cy,60);
+    ctx.fillStyle=OVEN.panel;pixelDisc(cx,cy,52);
     const a=ang(this.temp);
-    for(let k=10;k<56;k+=3){ctx.fillStyle=k>44?'#fff':'#e0d8f0';ctx.fillRect(R(cx+Math.cos(a)*k-3),R(cy+Math.sin(a)*k-3),6,6);}
+    for(let k=44;k<56;k+=3){ctx.fillStyle=OVEN.paper;ctx.fillRect(R(cx+Math.cos(a)*k-3),R(cy+Math.sin(a)*k-3),6,6);}
     const col=this.inBand?'#7dff8a':this.temp>this.HI?'#ff7a5c':'#ffe066';
-    text(R(this.temp)+'°',cx,cy+2,26,col);
+    label(R(this.temp)+'°',cx,cy+2,32,col);
     // 목표 표시
-    text('목표 '+this.LO+'~'+this.HI+'°',cx,cy+r+26,14,'#7dff8a');
+    text('목표 '+this.LO+'~'+this.HI+'°',cx,cy+r+26,11,'#7dff8a');
     // 치킨: 익을수록 노릇하게
     const chk=img.chicken;
     if(chk){
@@ -628,10 +651,12 @@ const Stage3 = {
       const bob=this.inBand?R(Math.sin(this.elapsed*14)*1):0;
       ctx.drawImage(off,R(cx-chk.width*s/2),R(452-chk.height*s/2)+bob,R(chk.width*s),R(chk.height*s));
     }
-    bar(60,520,240,12,this.cook,this.inBand?'#7dff8a':'#ffb13b');
-    text('익은 정도 '+R(this.cook*100)+'%',GW/2,550,13,'#fff');
+    panel(40,505,280,95);
+    bar(60,521,240,6,this.cook,this.inBand?'#7dff8a':OVEN.red);
+    label('익은 정도',60,551,16,OVEN.muted,'left');
+    label(R(this.cook*100)+'%',300,549,32,OVEN.paper,'right');
     const hint=this.inBand?'좋아요! 그대로 유지':this.temp<this.LO?'오른쪽으로 → 더 뜨겁게':'← 왼쪽으로 식히기';
-    text(hint,GW/2,582,15,this.inBand?'#7dff8a':'#ffe066');
+    label(hint,GW/2,581,16,this.inBand?'#7dff8a':OVEN.paper);
     drawFx();
   },
   cursorKind:'hand',
@@ -722,7 +747,10 @@ function render(){
   if(shake>0) ctx.translate(R(rnd(-shake,shake)),R(rnd(-shake,shake)));
   switch(game.mode){
   case 'attract': drawAttract(t); break;
-  case 'intro': game.stage.draw(); drawIntro(t); break;
+  case 'intro':
+    // Keep the movement demo clear of the live bowl, dial and progress card.
+    bg('bg'+game.stage.no,game.stage===Stage2?'rgba(15,10,14,.42)':'rgba(30,5,10,.42)');
+    drawIntro(t);break;
   case 'play': game.stage.draw(); drawHud(); if(game.stage.cursorKind) cursor(game.stage.cursorKind); else if(game.stage===Stage1) drawBowlHint(); break;
   case 'pause': game.stage.draw(); drawHud(); drawPause(t); break;
   case 'clear': game.stage.draw(); drawClear(t); break;
@@ -738,100 +766,104 @@ function drawBowlHint(){
 }
 function drawHud(){
   const st=game.stage,left=Math.max(0,st.TIME-st.elapsed);
-  panel(73,60,214,46,'rgba(49,25,39,.94)');
-  text('STAGE '+st.no+' · '+st.name,82,72,10,OVEN.amber,'left');
-  text(String(st.score).padStart(5,'0'),278,72,12,'#fff','right');
-  bar(83,85,130,5,st.progress(),OVEN.orange);
-  bar(83,97,130,3,left/st.TIME,left<10?'#ff5a3c':OVEN.red);
-  text(Math.ceil(left)+'초',276,99,8,left<10?'#ff8a8a':OVEN.muted,'right');
-  const progress=st.GOAL!==undefined?(st===Stage1?st.caught:st.cut)+'/'+st.GOAL:R(st.cook*100)+'%';
-  text(progress,276,86,9,'#7dff8a','right');
+  panel(73,60,214,62,OVEN.panel,OVEN.deepRed);
+  ctx.fillStyle=OVEN.red;ctx.fillRect(74,61,212,21);
+  label('0'+st.no+'  '+st.name,84,72,16,OVEN.paper,'left');
+  label(Math.ceil(left)+'초',276,72,16,OVEN.paper,'right');
+  label(String(st.score).padStart(5,'0'),84,103,32,OVEN.paper,'left');
+  const progress=st.GOAL!==undefined?(st===Stage1?st.caught:st.cut)+' / '+st.GOAL:R(st.cook*100)+'%';
+  label(progress,276,98,16,OVEN.paper,'right');
+  bar(194,111,82,4,st.progress(),OVEN.red);
+  bar(74,120,212,2,left/st.TIME,left<10?OVEN.amber:OVEN.red);
 }
 function drawAttract(t){
-  bg('bg2','rgba(60,16,14,.52)');
-  // 떠다니는 재료
-  FOODS.forEach((k,i)=>sprite(k,70+i*110,208+Math.sin(t*2+i*1.7)*6,1.4,Math.sin(t*1.3+i)*.15));
-  text('굽네 · 오븐사우나',GW/2,54,11,OVEN.orange);
-  panel(30,82,GW-60,64,OVEN.red,OVEN.orange);
-  text('치킨 조리 게임',GW/2,114,30,'#fff');
-  sprite('bowl',GW/2,262,1.2);
-  text('담기 · 썰기 · 굽기',GW/2,318,16,OVEN.amber);
+  bg('bg2','rgba(15,10,14,.42)');
+  panel(30,82,GW-60,64,OVEN.red,OVEN.red);
+  label('치킨 조리 게임',GW/2,114,32,OVEN.paper);
+  // Keep the original characters in full colour against the red kitchen.
+  FOODS.forEach((key,i)=>sprite(key,70+i*110,212+Math.sin(t*2+i*1.7)*6,1.4,Math.sin(t*1.3+i)*.15));
+  sprite('bowl',GW/2,274,1.2);
+  stepRail();
   const cdLeft=game.cooldownUntil-t;
-  let msg1,msg2,col='#fff';
-  if(cdLeft>0){msg1='다음 게임 준비 중';msg2=Math.ceil(cdLeft)+'초 뒤 시작할 수 있어요';col='#cfe0ff';}
-  else if(game.needExit){msg1='다음 분 차례예요';msg2='손을 잠깐 내렸다가 다시 보여 주세요';col='#cfe0ff';}
-  else if(game.holdStart!==null){msg1='그대로 손을 보여 주세요';msg2='곧 시작해요!';col='#7dff8a';}
-  else {msg1='카메라에 손바닥을 보여 주세요';msg2=hand.visible&&!hand.openPalm?'주먹을 펴고 손바닥을 보여 주세요':'보여 주면 바로 시작해요';}
-  panel(28,380,GW-56,78,'rgba(45,22,35,.94)');
-  text(msg1,GW/2,408,17,col);
-  text(msg2,GW/2,436,12,OVEN.muted);
-  // 손 올리기 안내 아이콘
-  const hy=520+R(Math.sin(t*5)*6);
+  let lines,msg;
+  if(cdLeft>0){lines=['다음 게임','준비 중'];msg=Math.ceil(cdLeft)+'초 뒤 시작할 수 있어요';}
+  else if(game.needExit){lines=['다음 분','차례예요'];msg='손을 내렸다가 다시 보여 주세요';}
+  else if(game.holdStart!==null){lines=['좋아요,','그대로!'];msg='손바닥을 유지하면 곧 시작해요';}
+  else {lines=['손바닥을','보여 주세요'];msg=hand.visible&&!hand.openPalm?'주먹을 펴고 카메라에 보여 주세요':'카메라에 손을 펴고 잠시 기다려요';}
+  panel(28,376,GW-56,130,OVEN.red,OVEN.red);
+  label(lines[0],GW/2,406,32,OVEN.paper);
+  label(lines[1],GW/2,443,32,OVEN.paper);
+  label(msg,GW/2,482,16,OVEN.paper);
+  bar(48,498,264,3,game.holdStart===null?0:(t-game.holdStart)/T.START_HOLD,OVEN.paper,OVEN.deepRed);
+  const hy=553+R(Math.sin(t*3)*4);
+  pixelRing(GW/2,hy,34,game.holdStart===null?0:(t-game.holdStart)/T.START_HOLD,OVEN.red,3);
   ctx.drawImage(CUR_HAND,R(GW/2-24),hy-21,48,42);
-  if(game.holdStart!==null){
-    const v=(t-game.holdStart)/T.START_HOLD;
-    pixelRing(GW/2,hy,34,v,OVEN.orange,4);
-    bar(80,470,200,6,v,OVEN.orange);
-  }
+  label('손 하나로 완성하는 나만의 치킨',GW/2,607,16,OVEN.muted);
 }
 function drawIntro(t){
   const k=t-game.modeAt, st=game.stage;
-  ctx.fillStyle='rgba(20,10,30,.55)';ctx.fillRect(0,0,GW,GH);
+  paintSceneVeil(ctx);
   const lift=R(Math.max(0,1-k*4)*14);
-  panel(30,200+lift,GW-60,170,'#302033',OVEN.orange);
-  text('STAGE '+st.no,GW/2,236+lift,16,OVEN.amber);
-  text(st.name,GW/2,272+lift,36,'#fff');
-  text(st.howto[0],GW/2,318+lift,13,OVEN.muted);
-  text(st.howto[1],GW/2,340+lift,13,OVEN.muted);
+  stepRail(st.no-1,164);
+  panel(30,200+lift,GW-60,186,OVEN.panel,OVEN.deepRed);
+  ctx.fillStyle=OVEN.red;ctx.fillRect(31,202+lift,GW-62,103);
+  label('STAGE 0'+st.no,GW/2,223+lift,16,OVEN.paper);
+  label(st.name,GW/2,267+lift,48,OVEN.paper);
+  label(st.howto[0],GW/2,333+lift,16,OVEN.paper);
+  label(st.howto[1],GW/2,357+lift,16,OVEN.muted);
   const left=Math.ceil(T.INTRO-k);
-  if(k>T.INTRO-1.5){ text(left>0?String(left):'시작!',GW/2,430,40,'#7dff8a'); }
-  if(!hand.visible) text('손을 보여 주세요',GW/2,586,14,'#ff8a8a');
+  if(k>T.INTRO-1.5) label(left>0?String(left):'시작!',GW/2,438,32,OVEN.paper);
+  if(!hand.visible) label('손을 보여 주세요',GW/2,586,16,OVEN.paper);
   drawGestureDemo(st,k);
 }
 function drawPause(t){
-  ctx.fillStyle='rgba(20,10,30,.6)';ctx.fillRect(0,0,GW,GH);
-  panel(34,230,GW-68,150,'#302033',OVEN.orange);
-  text('잠깐 멈춤',GW/2,262,24,'#ffb0b0');
-  text('손이 안 보여요',GW/2,298,14,'#fff');
-  text('다시 보여 주면 이어서 해요',GW/2,320,12,'#d8cce8');
+  paintSceneVeil(ctx);
+  panel(34,230,GW-68,164,OVEN.panel,OVEN.deepRed);
+  ctx.fillStyle=OVEN.red;ctx.fillRect(35,232,GW-70,52);
+  label('잠깐 멈춤',GW/2,258,32,OVEN.paper);
+  label('손이 안 보여요',GW/2,310,16,OVEN.paper);
+  label('다시 보여 주면 이어서 해요',GW/2,339,16,OVEN.muted);
   const left=Math.max(0,T.LOST_ABORT-(t-game.pauseAt));
-  bar(70,346,GW-140,8,left/T.LOST_ABORT,'#ffb13b');
-  if(game.resumeSince!==null) text('이어서 시작!',GW/2,410,18,'#7dff8a');
+  bar(58,369,GW-116,4,left/T.LOST_ABORT,OVEN.red);
+  if(game.resumeSince!==null) label('이어서 시작!',GW/2,434,16,OVEN.green);
 }
 function drawClear(t){
   const k=t-game.modeAt, last=game.results[game.results.length-1];
-  ctx.fillStyle='rgba(20,10,30,.5)';ctx.fillRect(0,0,GW,GH);
-  const s=Math.min(1,k*5);
-  panel(40,220,GW-80,150,last.kind==='clear'?'#1f5a2e':'#5a3a1f','#ffe066');
-  text(last.kind==='clear'?'성공!':'시간 종료',GW/2,256,R(20+s*12),last.kind==='clear'?'#7dff8a':'#ffe066');
-  text(last.name+' 점수',GW/2,300,13,'#fff');
-  text(String(last.score),GW/2,332,26,'#ffe066');
-  if(last.bonus) text('남은 시간 보너스 +'+last.bonus,GW/2,356,10,'#cfe0ff');
+  paintSceneVeil(ctx);
+  const lift=R(Math.max(0,1-k*5)*8);
+  panel(40,220+lift,GW-80,168,OVEN.panel,OVEN.deepRed);
+  ctx.fillStyle=OVEN.red;ctx.fillRect(41,222+lift,GW-82,64);
+  label(last.kind==='clear'?'성공!':'시간 종료',GW/2,256+lift,32,OVEN.paper);
+  label(last.name+' 점수',GW/2,308+lift,16,OVEN.muted);
+  label(String(last.score),GW/2,338+lift,32,OVEN.paper);
+  if(last.bonus) label('남은 시간 보너스 +'+last.bonus,GW/2,370+lift,16,OVEN.amber);
 }
 function drawResult(t){
   const k=t-game.modeAt;
-  bg('bg3','rgba(45,12,6,.52)');
-  text('굽네 · 오븐사우나',GW/2,54,11,OVEN.orange);
-  panel(30,82,GW-60,60,OVEN.red,OVEN.orange);
-  text('치킨 완성!',GW/2,112,30,'#fff');
+  bg('bg3','rgba(30,5,10,.52)');
+  panel(30,82,GW-60,60,OVEN.red,OVEN.red);
+  label('치킨 완성!',GW/2,112,32,OVEN.paper);
   const chk=img.chicken; if(chk){ const s=2; ctx.drawImage(getTint(chk,1),R(GW/2-chk.width*s/2),R(220-chk.height*s/2+Math.sin(t*4)*4),chk.width*s,chk.height*s); }
-  if(((t*6)|0)%3===0) burst(GW/2+rnd(-60,60),220+rnd(-30,30),['#ffe066','#ffffff','#ffb13b'],2,120);
+  if(((t*6)|0)%3===0) burst(GW/2+rnd(-60,60),220+rnd(-30,30),[OVEN.red,OVEN.paper,OVEN.amber],2,120);
   drawFx();
-  panel(40,300,GW-80,170,'rgba(30,18,44,.94)');
+  panel(40,300,GW-80,180,OVEN.panel,OVEN.deepRed);
+  label('오늘의 조리 기록',60,320,16,OVEN.muted,'left');
   game.results.forEach((r,i)=>{ if(k<0.4+i*0.35)return;
-    text(r.name,70,330+i*30,15,'#fff','left');
-    text(r.kind==='clear'?'성공':'시간 종료',160,330+i*30,11,r.kind==='clear'?'#7dff8a':'#ffe066','left');
-    text(String(r.score),GW-70,330+i*30,15,'#ffe066','right'); });
-  if(k>1.5){
-    ctx.fillStyle=OVEN.orange;ctx.fillRect(64,420,GW-128,2);
-    text('합계',70,446,16,'#fff','left'); text(String(game.total),GW-70,446,20,'#ffe066','right');
-  }
+    const y=348+i*28;
+    label('0'+(i+1),60,y,16,OVEN.red,'left');
+    label(r.name,87,y,16,OVEN.paper,'left');
+    label(r.kind==='clear'?'성공':'시간 종료',165,y,16,r.kind==='clear'?OVEN.green:OVEN.amber,'left');
+    label(String(r.score),300,y,16,OVEN.paper,'right');
+  });
+  ctx.fillStyle=OVEN.red;ctx.fillRect(41,427,GW-82,51);
+  label('합계',60,453,16,OVEN.paper,'left');
+  if(k>1.5) label(String(game.total),300,453,32,OVEN.paper,'right');
   if(k>2.0){
     const stars=game.total>=4300?3:game.total>=2800?2:1;
-    for(let i=0;i<3;i++) drawStar(GW/2-56+i*56,520,i<stars&&k>2.0+i*.3);
+    for(let i=0;i<3;i++) drawStar(GW/2-56+i*56,526,i<stars&&k>2.0+i*.3);
   }
   const left=Math.max(0,Math.ceil(T.RESULT-k));
-  text(left+'초 뒤 처음 화면으로',GW/2,590,12,'#d8cce8');
+  label(left+'초 뒤 처음 화면으로',GW/2,590,16,OVEN.muted);
 }
 const STAR=bitmap([
   '.......kk.......','......kyyk......','......kyyk......','.....kyyyyk.....',
