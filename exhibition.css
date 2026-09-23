@@ -1,7 +1,7 @@
 /* Original pixel characters with NeoDGM type and restrained oven-red accents. */
 html,body,#wrap{background:#160b0e}
 #wrap{display:block}
-#tv3View{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
+#tv3View{position:absolute;inset:0;width:100%;height:100%;image-rendering:auto}
 #stage{position:absolute;box-shadow:none;overflow:visible}
 #game{visibility:hidden}
 #camBox{width:calc(52*var(--u));height:calc(39*var(--u));right:calc(8*var(--u));bottom:calc(4*var(--u));border:calc(1*var(--u)) solid #a91924;border-radius:calc(5*var(--u));box-shadow:none}

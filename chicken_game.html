@@ -361,7 +361,7 @@ function drawBrandLogo(target){
 function bg(key,veil){
   kitchenBackdrop.key=key;kitchenBackdrop.veil=veil;
   // Background alignment stays fixed during catch/slice screen shake.
-  ctx.save();ctx.setTransform(1,0,0,1,0,0);paintKitchenBackdrop(ctx);ctx.restore();
+  const k=window.exhibitionDisplay?.k||1;ctx.save();ctx.setTransform(k,0,0,k,0,0);paintKitchenBackdrop(ctx);ctx.restore();
 }
 function roundedRect(x,y,w,h,r){
   r=Math.min(r,w/2,h/2);
