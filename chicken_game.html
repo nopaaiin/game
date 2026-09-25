@@ -57,7 +57,9 @@ const BOT = Q.get('bot') === '1';         // 자동 플레이 (검증용)
 const FONT = "'NeoDunggeunmo',monospace";
 const OVEN = {
   red:'#f21d27',deepRed:'#a91924',ink:'#160b0e',panel:'#291115',line:'#71312f',
-  paper:'#fff3df',muted:'#dbafa0',orange:'#ff8a3b',amber:'#ffd584',green:'#b9ed89',
+  paper:'#fff3df',muted:'#dbafa0',orange:'#ff8a3b',amber:'#ffd584',green:'#46d36a',
+  // 주색 = 레드, 조색 = 그린. 강조는 이 두 색만 쓴다.
+  deepGreen:'#17803a',
 };
 
 const T = {
@@ -463,7 +465,7 @@ function stepRail(active=-1,y=325){
     const x=47+i*94;
     ctx.fillStyle=active===i?OVEN.paper:OVEN.red;roundedRect(x,y-9,18,18,4);ctx.fill();
     label(String(i+1),x+9,y,16,active===i?OVEN.red:OVEN.paper);
-    label(name,x+26,y,16,active<0||active===i?OVEN.paper:OVEN.muted,'left');
+    label(name,x+26,y,16,active<0||active===i?OVEN.paper:'rgba(255,243,223,.45)','left');
   });
 }
 // 픽셀 원(링) 게이지
@@ -673,7 +675,7 @@ const Stage2 = {
       const s=p.fast?R(2+k*6):2; ctx.fillStyle=p.fast?`rgba(160,230,255,${k*.9})`:`rgba(255,255,255,${k*.25})`;
       ctx.fillRect(R(p.x-s/2),R(p.y-s/2),s,s);
       if(p.fast){ctx.fillStyle=`rgba(255,255,255,${k})`;ctx.fillRect(R(p.x)-1,R(p.y)-1,2,2);} }
-    if(this.combo>=2) text(this.combo+' COMBO',GW/2,132,20,OVEN.orange);
+    if(this.combo>=2) text(this.combo+' COMBO',GW/2,160,32,OVEN.green);
   },
   cursorKind:'knife',
 };
@@ -744,7 +746,7 @@ const Stage3 = {
     }
     panel(40,505,280,95);
     bar(60,521,240,6,this.cook,this.inBand?'#7dff8a':OVEN.red);
-    label('익은 정도',60,551,16,OVEN.muted,'left');
+    label('익은 정도',60,551,16,OVEN.paper,'left');
     label(R(this.cook*100)+'%',300,549,32,OVEN.paper,'right');
     const hint=this.inBand?'좋아요! 그대로 유지':this.temp<this.LO?'오른쪽으로 → 더 뜨겁게':'← 왼쪽으로 식히기';
     label(hint,GW/2,581,16,this.inBand?'#7dff8a':OVEN.paper);
@@ -865,31 +867,48 @@ function drawHud(){
   const progress=st.GOAL!==undefined?(st===Stage1?st.caught:st.cut)+' / '+st.GOAL:R(st.cook*100)+'%';
   label(progress,276,98,16,OVEN.paper,'right');
   bar(194,111,82,4,st.progress(),OVEN.red);
-  bar(84,117,192,2,left/st.TIME,left<10?OVEN.amber:OVEN.red);
+  bar(84,117,192,2,left/st.TIME,left<10?OVEN.paper:OVEN.green);
+}
+// 타이틀 글자: 레드 면 + 짙은 외곽선 + 그린 그림자 (레트로 아케이드 타이틀처럼)
+function titleWord(str,x,y,size,align='center'){
+  ctx.font=`${size}px ${FONT}`;ctx.textAlign=align;ctx.textBaseline='middle';
+  const o=3;
+  ctx.fillStyle=OVEN.ink;
+  for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) ctx.fillText(str,R(x)+dx,R(y)+5+dy);
+  ctx.fillStyle=OVEN.deepGreen; ctx.fillText(str,R(x),R(y)+5);
+  ctx.fillStyle=OVEN.ink;
+  for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) ctx.fillText(str,R(x)+dx,R(y)+dy);
+  ctx.fillStyle=OVEN.red; ctx.fillText(str,R(x),R(y));
+}
+function titleDot(x,y){
+  ctx.fillStyle=OVEN.ink;ctx.fillRect(R(x)-6,R(y)-6,12,12);
+  ctx.fillStyle=OVEN.green;ctx.fillRect(R(x)-3,R(y)-3,6,6);
+}
+function drawTitle(y){
+  const size=48,cw=size/2,gap=26;
+  const words=['PA','TTEOK','CHI'], widths=words.map(w=>w.length*cw);
+  const total=widths.reduce((a,b)=>a+b,0)+gap*2;
+  let x=GW/2-total/2;
+  words.forEach((w,i)=>{ titleWord(w,x+widths[i]/2,y,size); x+=widths[i];
+    if(i<2){ titleDot(x+gap/2,y); x+=gap; } });
+  titleWord('RUSH',GW/2,y+58,size);
 }
 function drawAttract(t){
-  bg('bg2','rgba(15,10,14,.42)');
-  panel(30,82,GW-60,64,OVEN.red,OVEN.red);
-  label('치킨 조리 게임',GW/2,114,32,OVEN.paper);
-  // Keep the original characters in full colour against the red kitchen.
-  FOODS.forEach((key,i)=>sprite(key,70+i*110,212+Math.sin(t*2+i*1.7)*6,1.4,Math.sin(t*1.3+i)*.15));
-  sprite('bowl',GW/2,274,1.2);
-  stepRail();
-  const cdLeft=game.cooldownUntil-t;
-  let lines,msg;
-  if(cdLeft>0){lines=['다음 게임','준비 중'];msg=Math.ceil(cdLeft)+'초 뒤 시작할 수 있어요';}
-  else if(game.needExit){lines=['다음 분','차례예요'];msg='손을 내렸다가 다시 보여 주세요';}
-  else if(game.holdStart!==null){lines=['좋아요,','그대로!'];msg='손바닥을 유지하면 곧 시작해요';}
-  else {lines=['손바닥을','보여 주세요'];msg=hand.visible&&!hand.openPalm?'주먹을 펴고 카메라에 보여 주세요':'카메라에 손을 펴고 잠시 기다려요';}
-  panel(28,376,GW-56,130,OVEN.red,OVEN.red);
-  label(lines[0],GW/2,406,32,OVEN.paper);
-  label(lines[1],GW/2,443,32,OVEN.paper);
-  label(msg,GW/2,482,16,OVEN.paper);
-  bar(48,498,264,3,game.holdStart===null?0:(t-game.holdStart)/T.START_HOLD,OVEN.paper,OVEN.deepRed);
-  const hy=553+R(Math.sin(t*3)*4);
-  pixelRing(GW/2,hy,34,game.holdStart===null?0:(t-game.holdStart)/T.START_HOLD,OVEN.red,3);
-  ctx.drawImage(CUR_HAND,R(GW/2-24),hy-21,48,42);
-  label('손 하나로 완성하는 나만의 치킨',GW/2,607,16,OVEN.muted);
+  bg('bg2','rgba(15,10,14,.62)');
+  drawTitle(128);
+  // 재료 셋은 제목 아래에서 가볍게 튄다
+  FOODS.forEach((key,i)=>sprite(key,82+i*98,300+Math.sin(t*2.4+i*1.7)*7,1.25,Math.sin(t*1.3+i)*.12));
+  const cdLeft=game.cooldownUntil-t, waiting=cdLeft>0||game.needExit;
+  const hold=game.holdStart===null?0:clamp((t-game.holdStart)/T.START_HOLD,0,1);
+  const hy=470;
+  // 손 링: 인식되면 그린으로 차오른다
+  pixelRing(GW/2,hy,38,hold,OVEN.green,4);
+  ctx.globalAlpha=waiting?.35:1;
+  ctx.drawImage(CUR_HAND,R(GW/2-24),hy-21+R(Math.sin(t*3)*3),48,42);
+  // PUSH START처럼 깜빡이는 한 줄
+  const blink=hold>0||((t*1.6)%1)<.62;
+  if(blink) label('손을 인식해 시작',GW/2,548,16,hold>0?OVEN.green:OVEN.paper);
+  ctx.globalAlpha=1;
 }
 function drawIntro(t){
   const k=t-game.modeAt, st=game.stage;
@@ -901,7 +920,7 @@ function drawIntro(t){
   label('STAGE 0'+st.no,GW/2,223+lift,16,OVEN.paper);
   label(st.name,GW/2,267+lift,48,OVEN.paper);
   label(st.howto[0],GW/2,333+lift,16,OVEN.paper);
-  label(st.howto[1],GW/2,357+lift,16,OVEN.muted);
+  label(st.howto[1],GW/2,357+lift,16,OVEN.paper);
   const left=Math.ceil(T.INTRO-k);
   if(k>T.INTRO-1.5) label(left>0?String(left):'시작!',GW/2,438,32,OVEN.paper);
   if(!hand.visible) label('손을 보여 주세요',GW/2,586,16,OVEN.paper);
@@ -912,8 +931,7 @@ function drawPause(t){
   panel(34,230,GW-68,164,OVEN.panel,OVEN.deepRed);
   panelStripe(34,230,GW-68,164,1,53);
   label('잠깐 멈춤',GW/2,258,32,OVEN.paper);
-  label('손이 안 보여요',GW/2,310,16,OVEN.paper);
-  label('다시 보여 주면 이어서 해요',GW/2,339,16,OVEN.muted);
+  label('손을 보여 주세요',GW/2,318,16,OVEN.paper);
   const left=Math.max(0,T.LOST_ABORT-(t-game.pauseAt));
   bar(58,369,GW-116,4,left/T.LOST_ABORT,OVEN.red);
   if(game.resumeSince!==null) label('이어서 시작!',GW/2,434,16,OVEN.green);
@@ -923,11 +941,10 @@ function drawClear(t){
   paintSceneVeil(ctx);
   const lift=R(Math.max(0,1-k*5)*8);
   panel(40,220+lift,GW-80,168,OVEN.panel,OVEN.deepRed);
-  panelStripe(40,220+lift,GW-80,168,1,65);
+  panelStripe(40,220+lift,GW-80,168,1,65,last.kind==='clear'?OVEN.green:OVEN.red);
   label(last.kind==='clear'?'성공!':'시간 종료',GW/2,256+lift,32,OVEN.paper);
-  label(last.name+' 점수',GW/2,308+lift,16,OVEN.muted);
-  label(String(last.score),GW/2,338+lift,32,OVEN.paper);
-  if(last.bonus) label('남은 시간 보너스 +'+last.bonus,GW/2,370+lift,16,OVEN.amber);
+  label(String(last.score),GW/2,322+lift,32,OVEN.paper);
+  if(last.bonus) label('보너스 +'+last.bonus,GW/2,362+lift,16,OVEN.green);
 }
 function drawResult(t){
   const k=t-game.modeAt;
@@ -935,15 +952,14 @@ function drawResult(t){
   panel(30,82,GW-60,60,OVEN.red,OVEN.red);
   label('치킨 완성!',GW/2,112,32,OVEN.paper);
   const chk=img.chicken; if(chk){ const s=2; ctx.drawImage(getTint(chk,1),R(GW/2-imW(chk)*s/2),R(220-imH(chk)*s/2+Math.sin(t*4)*4),imW(chk)*s,imH(chk)*s); }
-  if(((t*6)|0)%3===0) burst(GW/2+rnd(-60,60),220+rnd(-30,30),[OVEN.red,OVEN.paper,OVEN.amber],2,120);
+  if(((t*6)|0)%3===0) burst(GW/2+rnd(-60,60),220+rnd(-30,30),[OVEN.red,OVEN.paper,OVEN.green],2,120);
   drawFx();
   panel(40,300,GW-80,180,OVEN.panel,OVEN.deepRed);
-  label('오늘의 조리 기록',60,320,16,OVEN.muted,'left');
   game.results.forEach((r,i)=>{ if(k<0.4+i*0.35)return;
     const y=348+i*28;
     label('0'+(i+1),60,y,16,OVEN.red,'left');
     label(r.name,87,y,16,OVEN.paper,'left');
-    label(r.kind==='clear'?'성공':'시간 종료',165,y,16,r.kind==='clear'?OVEN.green:OVEN.amber,'left');
+    label(r.kind==='clear'?'성공':'시간 종료',165,y,16,r.kind==='clear'?OVEN.green:OVEN.red,'left');
     label(String(r.score),300,y,16,OVEN.paper,'right');
   });
   panelStripe(40,300,GW-80,180,127,51);
@@ -953,8 +969,6 @@ function drawResult(t){
     const stars=game.total>=4300?3:game.total>=2800?2:1;
     for(let i=0;i<3;i++) drawStar(GW/2-56+i*56,526,i<stars&&k>2.0+i*.3);
   }
-  const left=Math.max(0,Math.ceil(T.RESULT-k));
-  label(left+'초 뒤 처음 화면으로',GW/2,590,16,OVEN.muted);
 }
 const STAR=bitmap([
   '.......kk.......','......kyyk......','......kyyk......','.....kyyyyk.....',

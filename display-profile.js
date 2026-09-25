@@ -63,7 +63,7 @@ const exhibitionDisplay={
   clientToGame(x,y){const r=document.getElementById('stage').getBoundingClientRect();return{x:(x-r.left)/r.width*GW,y:(y-r.top)/r.height*GH};},
   present(){
     let c=this.output;const m=this.matrix,w=this.world;
-    const label=game.mode==='attract'?'치킨 조리 게임 · 손바닥을 보여 주세요':
+    const label=game.mode==='attract'?'PA · TTEOK · CHI RUSH · 손을 인식해 시작':
       game.mode==='result'?'치킨 완성 · 총점 '+game.total:
       '스테이지 '+(game.stageIdx+1)+' '+(game.stage?.name||'')+' · '+game.mode+' · 점수 '+(game.stage?.score||0);
     if(this.view.getAttribute('aria-label')!==label){this.view.setAttribute('role','img');this.view.setAttribute('aria-label',label);}
