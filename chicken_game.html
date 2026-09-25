@@ -409,9 +409,8 @@ function titlePattern(target){
   let p=titlePatterns.get(target);
   if(p!==undefined)return p;
   const c=document.createElement('canvas');c.width=c.height=48;const x=c.getContext('2d');
-  x.fillStyle='#6a0c15';x.fillRect(0,0,48,48);
-  x.fillStyle='#7c1220';x.fillRect(0,0,24,24);x.fillRect(24,24,24,24);
-  x.fillStyle='rgba(255,255,255,.05)';x.fillRect(0,0,24,2);x.fillRect(24,24,24,2);
+  x.fillStyle='#1b0c10';x.fillRect(0,0,48,48);
+  x.fillStyle='#261016';x.fillRect(0,0,24,24);x.fillRect(24,24,24,24);
   p=target.createPattern?target.createPattern(c,'repeat'):null;titlePatterns.set(target,p);return p;
 }
 const TITLE_STARS=[[34,74,0],[322,88,1.3],[18,262,2.1],[340,228,.7],[46,420,1.7],[318,396,2.6],[28,590,.4],[330,560,1.1],[92,40,2.9],[268,36,.2]];
@@ -424,7 +423,7 @@ function paintTitleBackdrop(target){
   const t=game.t||0,pat=titlePattern(target);
   const off=(t*14)%48;
   target.save();
-  target.fillStyle=pat||'#6a0c15';target.translate(off,off);
+  target.fillStyle=pat||'#1b0c10';target.translate(off,off);
   target.fillRect(-GW-off,-GH-off,GW*3,GH*3);
   target.restore();
   // 위아래 어둡게 (타이틀과 손 영역에 시선이 모이게)
@@ -434,8 +433,8 @@ function paintTitleBackdrop(target){
   target.fillStyle=g;target.fillRect(-GW,-GH,GW*3,GH*3);
   // 아치 밖까지 이어지는 반짝임
   for(const [x,y,ph] of [...TITLE_STARS,[-40,160,.9],[400,300,1.9],[-30,480,2.4],[392,120,.3]]){
-    const k=(Math.sin(t*2.2+ph*2.4)+1)/2; if(k<.25)continue;
-    pixelSpark(target,x,y,k>.7?6:4,k>.7?OVEN.paper:OVEN.green);
+    const k=(Math.sin(t*2.2+ph*2.4)+1)/2; if(k<.55)continue;
+    pixelSpark(target,x,y,k>.85?5:3,k>.85?OVEN.red:OVEN.deepRed);
   }
 }
 function paintKitchenBackdrop(target){
@@ -912,7 +911,7 @@ function titleWord(str,x,y,size,align='center'){
   const o=3;
   ctx.fillStyle=OVEN.ink;
   for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) ctx.fillText(str,R(x)+dx,R(y)+5+dy);
-  ctx.fillStyle=OVEN.deepGreen; ctx.fillText(str,R(x),R(y)+5);
+  ctx.fillStyle=OVEN.deepRed; ctx.fillText(str,R(x),R(y)+5);
   ctx.fillStyle=OVEN.ink;
   for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) ctx.fillText(str,R(x)+dx,R(y)+dy);
   ctx.fillStyle=OVEN.red; ctx.fillText(str,R(x),R(y));
@@ -939,13 +938,13 @@ const CLOUD=[[0,0,80],[-96,-8,52],[96,-8,52],[-138,16,40],[138,16,40],[-62,-34,4
 function drawTitleCloud(cx,cy,t){
   const bob=R(Math.sin(t*1.6)*2);
   const pass=(grow,col)=>{ctx.fillStyle=col;for(const [dx,dy,r] of CLOUD)pixelBlob(cx+dx,cy+dy+bob,r+grow);};
-  pass(6,OVEN.ink);pass(3,OVEN.deepGreen);pass(0,OVEN.green);
+  pass(6,OVEN.ink);pass(3,OVEN.red);pass(0,OVEN.paper);
   // 구름 위쪽 하이라이트
-  ctx.fillStyle='rgba(255,255,255,.22)';
+  ctx.fillStyle='rgba(255,255,255,.7)';
   for(const [dx,dy,r] of CLOUD) if(dy<0) ctx.fillRect(R(cx+dx-r*.4),R(cy+dy+bob-r*.72),R(r*.5),4);
   // 구름 주변을 도는 작은 방울
   for(let i=0;i<6;i++){const a=t*.9+i*Math.PI/3, px=cx+Math.cos(a)*176, py=cy+bob+Math.sin(a)*96;
-    ctx.fillStyle=OVEN.ink;pixelBlob(px,py,9);ctx.fillStyle=i%2?OVEN.green:OVEN.paper;pixelBlob(px,py,6);}
+    ctx.fillStyle=OVEN.ink;pixelBlob(px,py,9);ctx.fillStyle=i%3===0?OVEN.green:i%2?OVEN.red:OVEN.paper;pixelBlob(px,py,6);}
 }
 // 재료들이 서 있는 무대 (그림자 + 바닥 띠)
 function drawTitleStage(t){
