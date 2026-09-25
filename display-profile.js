@@ -50,7 +50,7 @@ const exhibitionDisplay={
     // high-quality filtering, instead of uneven nearest-neighbour stretching.
     // maxK drops automatically on a slow PC (see present) so hand input stays smooth.
     const ps=w.scale*Math.max(m.sx,m.sy);
-    this.ps=ps;this.maxK=this.maxK||Number(Q.get('quality'))||4;
+    this.ps=ps;this.maxK=this.maxK||Number(Q.get('quality'))||6;
     this.applyK();
     this.output.imageSmoothingEnabled=false;
   },
