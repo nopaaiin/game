@@ -979,32 +979,41 @@ function drawHud(){
   bar(84,117,192,2,left/st.TIME,left<10?OVEN.paper:OVEN.green);
 }
 // 타이틀 글자: 레드 면 + 짙은 외곽선 + 그린 그림자 (레트로 아케이드 타이틀처럼)
-function titleWord(str,x,y,size,align='center'){
-  ctx.font=`${size}px ${FONT}`;ctx.textAlign=align;ctx.textBaseline='middle';
+function titleWord(str,x,y,size,align='center',g=ctx){
+  g.font=`${size}px ${FONT}`;g.textAlign=align;g.textBaseline='middle';
   const o=3, O=6, ring=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1],[-.5,-1],[.5,-1],[-.5,1],[.5,1],[-1,-.5],[1,-.5],[-1,.5],[1,.5]];
   // 글자 주변을 넓게 어둡게 → 배경과 분리
-  ctx.fillStyle='rgba(12,3,6,.85)';
-  for(const [dx,dy] of ring){ctx.fillText(str,R(x+dx*(O+2)),R(y+dy*(O+2)));ctx.fillText(str,R(x+dx*(O+2)),R(y+5+dy*(O+2)));}
-  ctx.fillStyle=OVEN.ink;
-  for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) ctx.fillText(str,R(x)+dx,R(y)+5+dy);
-  ctx.fillStyle=OVEN.orange; ctx.fillText(str,R(x),R(y)+5);
-  ctx.fillStyle=OVEN.ink;
-  for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) ctx.fillText(str,R(x)+dx,R(y)+dy);
-  ctx.fillStyle=OVEN.paper; ctx.fillText(str,R(x),R(y)-2);
-  ctx.fillStyle=OVEN.red; ctx.fillText(str,R(x),R(y));
+  g.fillStyle='rgba(12,3,6,.85)';
+  for(const [dx,dy] of ring){g.fillText(str,R(x+dx*(O+2)),R(y+dy*(O+2)));g.fillText(str,R(x+dx*(O+2)),R(y+5+dy*(O+2)));}
+  g.fillStyle=OVEN.ink;
+  for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) g.fillText(str,R(x)+dx,R(y)+5+dy);
+  g.fillStyle=OVEN.orange; g.fillText(str,R(x),R(y)+5);
+  g.fillStyle=OVEN.ink;
+  for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) g.fillText(str,R(x)+dx,R(y)+dy);
+  g.fillStyle=OVEN.paper; g.fillText(str,R(x),R(y)-2);
+  g.fillStyle=OVEN.red; g.fillText(str,R(x),R(y));
 }
-function titleDot(x,y){
-  ctx.fillStyle=OVEN.ink;ctx.fillRect(R(x)-6,R(y)-6,12,12);
-  ctx.fillStyle=OVEN.orange;ctx.fillRect(R(x)-3,R(y)-3,6,6);
+function titleDot(x,y,g=ctx){
+  g.fillStyle=OVEN.ink;g.fillRect(R(x)-6,R(y)-6,12,12);
+  g.fillStyle=OVEN.orange;g.fillRect(R(x)-3,R(y)-3,6,6);
 }
+// 타이틀 글자는 매 프레임 글자를 수십 번 찍지 않도록, 렌더 배율(k)별로 한 번만 그려 둔다.
+const titleCache={k:0,c:null};
 function drawTitle(y){
-  const size=48,cw=size/2,gap=26;
-  const words=['PA','TTEOK','CHI'], widths=words.map(w=>w.length*cw);
-  const total=widths.reduce((a,b)=>a+b,0)+gap*2;
-  let x=GW/2-total/2;
-  words.forEach((w,i)=>{ titleWord(w,x+widths[i]/2,y,size); x+=widths[i];
-    if(i<2){ titleDot(x+gap/2,y); x+=gap; } });
-  titleWord('RUSH',GW/2,y+58,size);
+  const k=window.exhibitionDisplay?.k||1, top=y-44, H=150;
+  if(titleCache.k!==k||!titleCache.c){
+    const c=document.createElement('canvas');c.width=GW*k;c.height=H*k;const g=c.getContext('2d');
+    if(g.setTransform){g.setTransform(k,0,0,k,0,-top*k);g.imageSmoothingEnabled=false;}
+    const size=48,cw=size/2,gap=26;
+    const words=['PA','TTEOK','CHI'], widths=words.map(w=>w.length*cw);
+    const total=widths.reduce((a,b)=>a+b,0)+gap*2;
+    let x=GW/2-total/2;
+    words.forEach((w,i)=>{ titleWord(w,x+widths[i]/2,y,size,'center',g); x+=widths[i];
+      if(i<2){ titleDot(x+gap/2,y,g); x+=gap; } });
+    titleWord('RUSH',GW/2,y+58,size,'center',g);
+    titleCache.k=k;titleCache.c=c;
+  }
+  ctx.drawImage(titleCache.c,0,top,GW,H);
 }
 // 제목 뒤 그린 구름 (퍼즐보블 타이틀의 폭발 구름처럼, 픽셀 원을 겹쳐 만든다)
 function pixelBlob(x0,y0,r){
