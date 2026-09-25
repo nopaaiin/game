@@ -99,6 +99,8 @@ const exhibitionDisplay={
   }
 };
 window.exhibitionDisplay=exhibitionDisplay;
+// 카메라 미리보기는 기본으로 숨긴다 (C 키 또는 ?cam=1 로 보기)
+if(Q.get('cam')!=='1'&&typeof document!=='undefined')document.body?.classList?.toggle('hide-camera',true);
 window.DEBUG_BOWL=false;
 addEventListener('keydown',e=>{
   if(e.repeat)return;

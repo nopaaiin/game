@@ -478,14 +478,16 @@ function paintTitleBackdrop(target){
       target.fillRect(R(x0+(x1-x0)*k)-1,R(yy),2,3);}
   }
   // 양옆 열선 (아치 안쪽 가장자리 + 아치 밖)
-  archCoil(target,t,H);
   // 아지랑이: 바닥에서 올라가는 흔들리는 열기
   for(let i=0;i<7;i++){
     const k=((t*.25+i/7)%1), hx=40+i*47+Math.sin(t*2+i)*6, hy=floor-k*260;
     target.fillStyle=`rgba(255,138,59,${(1-k)*.35})`;
     for(let j=0;j<5;j++)target.fillRect(R(hx+Math.sin(k*12+j)*4),R(hy-j*6),2,4);
   }
-  // CRT 주사선
+  // 배경은 한 단계 뒤로: 어둡게 눌러서 캐릭터·글자와 떨어지게
+  target.fillStyle='rgba(20,4,9,.42)';target.fillRect(-GW,-GH,GW*3,GH*3);
+  archCoil(target,t,H);
+  // CRT 주사선 (배경 레이어에만)
   target.fillStyle='rgba(0,0,0,.14)';
   for(let yy=-GH;yy<GH*2;yy+=4)target.fillRect(-GW,yy,GW*3,1);
 }
@@ -960,7 +962,10 @@ function drawHud(){
 // 타이틀 글자: 레드 면 + 짙은 외곽선 + 그린 그림자 (레트로 아케이드 타이틀처럼)
 function titleWord(str,x,y,size,align='center'){
   ctx.font=`${size}px ${FONT}`;ctx.textAlign=align;ctx.textBaseline='middle';
-  const o=3;
+  const o=3, O=6, ring=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1],[-.5,-1],[.5,-1],[-.5,1],[.5,1],[-1,-.5],[1,-.5],[-1,.5],[1,.5]];
+  // 글자 주변을 넓게 어둡게 → 배경과 분리
+  ctx.fillStyle='rgba(12,3,6,.85)';
+  for(const [dx,dy] of ring){ctx.fillText(str,R(x+dx*(O+2)),R(y+dy*(O+2)));ctx.fillText(str,R(x+dx*(O+2)),R(y+5+dy*(O+2)));}
   ctx.fillStyle=OVEN.ink;
   for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) ctx.fillText(str,R(x)+dx,R(y)+5+dy);
   ctx.fillStyle=OVEN.orange; ctx.fillText(str,R(x),R(y)+5);
@@ -999,6 +1004,24 @@ function drawTitleCloud(cx,cy,t){
   for(let i=0;i<6;i++){const a=t*.9+i*Math.PI/3, px=cx+Math.cos(a)*176, py=cy+bob+Math.sin(a)*96;
     ctx.fillStyle=OVEN.ink;pixelBlob(px,py,9);ctx.fillStyle=i%3===0?OVEN.green:i%2?OVEN.red:OVEN.paper;pixelBlob(px,py,6);}
 }
+// 캐릭터 스티커: 크림 테두리 + 짙은 외곽선을 한 번 만들어 두고 쓴다
+const stickers={};
+function sticker(key){
+  const im=img[key]; if(!im)return null; if(stickers[key])return stickers[key];
+  const res=im.res||1, a=3*res, b=2*res, pad=a+b+2;
+  const c=document.createElement('canvas');c.width=im.width+pad*2;c.height=im.height+pad*2;c.res=res;
+  const x=c.getContext('2d'); if(!x.drawImage)return im;
+  const sil=(col,r)=>{const m=document.createElement('canvas');m.width=c.width;m.height=c.height;const mx=m.getContext('2d');
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++)if(dx*dx+dy*dy<=r*r+r)mx.drawImage(im,pad+dx,pad+dy);
+    mx.globalCompositeOperation='source-in';mx.fillStyle=col;mx.fillRect(0,0,m.width,m.height);x.drawImage(m,0,0);};
+  sil(OVEN.ink,a+b);sil(OVEN.paper,a);x.drawImage(im,pad,pad);
+  stickers[key]=c;return c;
+}
+function drawSticker(key,x,y,scale,rot){
+  const im=sticker(key); if(!im)return;
+  ctx.save();ctx.translate(R(x),R(y));if(rot)ctx.rotate(rot);
+  const w=imW(im)*scale,h=imH(im)*scale;ctx.drawImage(im,R(-w/2),R(-h/2),R(w),R(h));ctx.restore();
+}
 // 재료들은 석쇠 위 오븐 팬에서 열기에 톡톡 튄다
 function drawTitleTray(t){
   const ty=560;
@@ -1008,7 +1031,7 @@ function drawTitleTray(t){
   FOODS.forEach((key,i)=>{
     const ph=t*4.2+i*2.1, pop=Math.max(0,Math.sin(ph))**2*18, x=80+i*100;
     ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(R(x-22+pop*.3),ty-2,R(44-pop*.6),3);
-    sprite(key,x,ty-42-pop,1.35,key==='ricecake'?0:Math.sin(ph)*.06);
+    drawSticker(key,x,ty-42-pop,1.35,key==='ricecake'?0:Math.sin(ph)*.06);
   });
 }
 function drawAttract(t){
@@ -1023,7 +1046,7 @@ function drawAttract(t){
   ctx.globalAlpha=waiting?.35:1;
   ctx.drawImage(CUR_HAND,R(GW/2-24),hy-21+R(Math.sin(t*3)*3),48,42);
   // PUSH START처럼 깜빡이는 한 줄
-  const blink=hold>0||((t*1.6)%1)<.62;
+  const blink=hold>0||((t*.55)%1)<.72;
   if(blink){ctx.fillStyle='rgba(22,11,14,.72)';ctx.fillRect(GW/2-86,334,172,30);
     label('손을 인식해 시작',GW/2,349,16,hold>0?OVEN.green:OVEN.paper);}
   ctx.globalAlpha=1;
