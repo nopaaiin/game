@@ -25,7 +25,7 @@ const exhibitionDisplay={
     this.resize();addEventListener('resize',()=>this.resize());
   },
   resize(){
-    const dpr=Math.min(devicePixelRatio||1,4),c=this.profile.calibration,p=this.profile,w=this.world;
+    const dpr=Math.min(devicePixelRatio||1,4,3840/Math.max(1,innerWidth,innerHeight)),c=this.profile.calibration,p=this.profile,w=this.world;
     this.view.width=Math.round(innerWidth*dpr);this.view.height=Math.round(innerHeight*dpr);
     const value=(key,fallback)=>{const n=Number(Q.get(key));return Q.has(key)&&Number.isFinite(n)?n:fallback;};
     if(this.preview){

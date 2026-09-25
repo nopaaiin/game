@@ -445,6 +445,13 @@ function archCoil(target,t,H){
     target.fillRect(R(x+nx*z*2)-1,R(y+ny*z*2)-1,3,3);
   }
 }
+const scanPatterns=new WeakMap();
+function scanPattern(target){
+  if(scanPatterns.has(target))return scanPatterns.get(target);
+  const c=document.createElement('canvas');c.width=1;c.height=4;const x=c.getContext('2d');
+  x.fillStyle='rgba(0,0,0,.14)';x.fillRect(0,0,1,1);
+  const p=target.createPattern?target.createPattern(c,'repeat'):null;scanPatterns.set(target,p);return p;
+}
 function paintTitleBackdrop(target){
   const t=game.t||0, H=VW.horizon, cx=GW/2;
   target.fillStyle=VW.sky;target.fillRect(-GW,-GH,GW*3,GH*3);
@@ -472,10 +479,11 @@ function paintTitleBackdrop(target){
   }
   for(let i=-12;i<=12;i++){
     // 소실점(가운데 수평선)에서 퍼지는 세로 살
-    const x0=cx+i*10, x1=cx+i*64;
-    for(let yy=floor;yy<GH+40;yy+=3){const k=(yy-floor)/depth;
-      target.fillStyle=k>.5?'rgba(255,106,43,.9)':'rgba(207,42,31,.8)';
-      target.fillRect(R(x0+(x1-x0)*k)-1,R(yy),2,3);}
+    const x0=cx+i*10, x1=cx+i*64, ym=floor+depth*.5, xm=(x0+x1)/2;
+    target.fillStyle='rgba(207,42,31,.8)';
+    target.beginPath();target.moveTo(x0-1,floor);target.lineTo(x0+1,floor);target.lineTo(xm+1,ym);target.lineTo(xm-1,ym);target.fill();
+    target.fillStyle='rgba(255,106,43,.9)';
+    target.beginPath();target.moveTo(xm-1,ym);target.lineTo(xm+1,ym);target.lineTo(x1+1,GH+40);target.lineTo(x1-1,GH+40);target.fill();
   }
   // 양옆 열선 (아치 안쪽 가장자리 + 아치 밖)
   // 아지랑이: 바닥에서 올라가는 흔들리는 열기
@@ -488,17 +496,28 @@ function paintTitleBackdrop(target){
   target.fillStyle='rgba(20,4,9,.42)';target.fillRect(-GW,-GH,GW*3,GH*3);
   archCoil(target,t,H);
   // CRT 주사선 (배경 레이어에만)
-  target.fillStyle='rgba(0,0,0,.14)';
-  for(let yy=-GH;yy<GH*2;yy+=4)target.fillRect(-GW,yy,GW*3,1);
+  const sl=scanPattern(target);
+  if(sl){target.fillStyle=sl;target.fillRect(-GW,-GH,GW*3,GH*3);}
+}
+const tintedCache={};
+function tintedBackdrop(key,im){
+  if(!im)return null; if(tintedCache[key])return tintedCache[key];
+  const c=document.createElement('canvas');c.width=im.width;c.height=im.height;c.name=im.name||('px/'+key+'.png');
+  const x=c.getContext('2d');
+  x.drawImage(im,0,0);
+  // Colour only the kitchen backdrop. Ingredient/bowl sprites retain their own palettes.
+  x.globalCompositeOperation='color';x.globalAlpha=key==='bg2'?.08:.20;
+  x.fillStyle=OVEN.red;x.fillRect(0,0,c.width,c.height);
+  x.globalCompositeOperation='destination-in';x.globalAlpha=1;x.drawImage(im,0,0);
+  tintedCache[key]=c;return c;
 }
 function paintKitchenBackdrop(target){
   if(kitchenBackdrop.key==='title'){paintTitleBackdrop(target);return;}
   const {key,veil}=kitchenBackdrop,im=img[key];
   target.fillStyle=OVEN.ink;target.fillRect(-GW,-GH,GW*3,GH*3);
-  if(im) target.drawImage(im,-27,BACKDROP_Y[key]??-48,414,736);
-  // Colour only the kitchen backdrop. Ingredient/bowl sprites retain their own palettes.
-  target.save();target.globalCompositeOperation='color';target.globalAlpha=key==='bg2'?.08:.20;
-  target.fillStyle=OVEN.red;target.fillRect(-GW,-GH,GW*3,GH*3);target.restore();
+  // The red colour pass is baked once per background (a full-screen 'color' blend every frame is slow on 4K).
+  const layer=tintedBackdrop(key,im);
+  if(layer) target.drawImage(layer,-27,BACKDROP_Y[key]??-48,414,736);
   if(veil){target.fillStyle=veil;target.fillRect(-GW,-GH,GW*3,GH*3);}
   // Extend the lighting through the TV bleed, without a rectangular edge at the arch.
   const shade=target.createLinearGradient(0,-40,0,GH);
