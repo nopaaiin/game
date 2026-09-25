@@ -1031,7 +1031,7 @@ function drawTitleTray(t){
   FOODS.forEach((key,i)=>{
     const ph=t*4.2+i*2.1, pop=Math.max(0,Math.sin(ph))**2*18, x=80+i*100;
     ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(R(x-22+pop*.3),ty-2,R(44-pop*.6),3);
-    drawSticker(key,x,ty-42-pop,1.35,key==='ricecake'?0:Math.sin(ph)*.06);
+    sprite(key,x,ty-42-pop,1.35,key==='ricecake'?0:Math.sin(ph)*.06);
   });
 }
 function drawAttract(t){
