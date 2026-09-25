@@ -279,7 +279,9 @@ function initHands(){
   if(typeof Hands==='undefined'){cameraState='error';showErr('손 인식을 준비하고 있어요 · 운영자에게 알려 주세요');return;}
   handsModel=new Hands({locateFile:f=>'lib/mediapipe/'+f});
   // 가벼운 모델(0)로 초당 감지 횟수를 늘리고, 두 손까지 찾아서 한 사람의 손만 따라간다.
-  handsModel.setOptions({maxNumHands:2,modelComplexity:0,minDetectionConfidence:0.55,minTrackingConfidence:0.35});
+  // 한 손만 추적한다: 처음 잡힌 손을 계속 따라가므로 여러 사람이 있어도 첫 사람으로 고정된다.
+  // 추적 기준이 낮으면 손이 빠진 뒤 배경에 '가짜 손'이 붙어 그 자리에 멈춘다 → 0.6 으로 올림.
+  handsModel.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.6,minTrackingConfidence:0.6});
   handsModel.onResults(r=>{
     modelOK=true;
     if(cameraState==='tracking-error'){cameraState='ready';showErr('');}
@@ -287,6 +289,7 @@ function initHands(){
     const lms=r.multiHandLandmarks;
     if(lms&&lms.length){
       const lm=pickHand(lms,t);
+      if(stuckTrack(lm,t)){ markNoHand(t+1); return; }
       // 손바닥 중심(0,5,9,17) 60% + 검지 끝 40% : 흔들림은 적고 반응은 빠르게
       const px=(lm[0].x+lm[5].x+lm[9].x+lm[17].x)/4, py=(lm[0].y+lm[5].y+lm[9].y+lm[17].y)/4;
       hand.rawX=px; hand.rawY=py;
@@ -328,6 +331,15 @@ const PERF={frames:0,cam:0,det:0,inf:0,infFps:0,at:0,fps:60,camFps:0,detFps:0,sh
     this.el.style.display='block';
     this.el.textContent=`화면 ${this.fps.toFixed(0)}fps · 분석 ${this.infFps.toFixed(0)}회/초 · 손 잡힘 ${this.detFps.toFixed(0)}회/초\n렌더 배율 ${window.exhibitionDisplay?.k||1} · 범위 ${REACH.gain}`;}};
 addEventListener('keydown',e=>{if(!e.repeat&&e.key.toLowerCase()==='f')PERF.show=!PERF.show;});
+// 멈춘 추적 감지: 진짜 손은 가만히 있어도 미세하게 떨린다. 2초 동안 1픽셀도 안 움직이면
+// 배경에 붙은 가짜 추적으로 보고 추적을 초기화해 손을 새로 찾게 한다.
+const STUCK={x:0,y:0,since:0,reset:false};
+function stuckTrack(lm,t){
+  const x=lm[9].x,y=lm[9].y;
+  if(Math.hypot(x-STUCK.x,y-STUCK.y)>0.0025){STUCK.x=x;STUCK.y=y;STUCK.since=t;return false;}
+  if(t-STUCK.since>2){STUCK.since=t; STUCK.reset=true; return true;}
+  return false;
+}
 async function camLoop(){
   if(!SIM && !BOT){
     // 새 프레임 알림(rVFC)은 화면 밖 video 에서 거의 안 오는 브라우저가 있어서 기다리지 않는다.
@@ -335,7 +347,10 @@ async function camLoop(){
     const tn=performance.now();
     if(camOK && handsModel && !sending && video.readyState>=2 && tn-lastSendAt>=25){
       sending=true; newCamFrame=false; lastSendAt=tn;
-      try{await handsModel.send({image:video});}catch(e){cameraState='tracking-error';showErr('손 인식을 다시 연결하고 있어요');}
+      // 분석이 1.5초 넘게 안 끝나면(드묾) 기다리지 않고 다음 프레임으로 넘어간다: 그 자리에 굳지 않게.
+      try{await Promise.race([handsModel.send({image:video}),new Promise(r=>setTimeout(r,1500))]);}
+      catch(e){cameraState='tracking-error';showErr('손 인식을 다시 연결하고 있어요');}
+      if(STUCK.reset){STUCK.reset=false;try{await handsModel.reset();}catch(e){}}
       sending=false; PERF.inf++;
     }
     drawCam();
