@@ -402,40 +402,56 @@ function sprite(key,x,y,scale=1,rot=0,alpha=1){
 // Overscan raises the existing artwork and keeps ceiling/cabinet frames off the arch seam.
 const kitchenBackdrop={key:'bg2',veil:'rgba(28,5,10,.52)'};
 const BACKDROP_Y={bg1:-48,bg2:-56,bg3:-80};
-// ---- 타이틀 전용 아케이드 배경: 흐르는 레드 체크 + 반짝이는 픽셀 별 ----
-// TV 아치의 가장자리(블리드)까지 같은 무늬로 채우도록 target 을 받는다.
-const titlePatterns=new WeakMap();
-function titlePattern(target){
-  let p=titlePatterns.get(target);
-  if(p!==undefined)return p;
-  const c=document.createElement('canvas');c.width=c.height=48;const x=c.getContext('2d');
-  x.fillStyle='#1b0c10';x.fillRect(0,0,48,48);
-  x.fillStyle='#261016';x.fillRect(0,0,24,24);x.fillRect(24,24,24,24);
-  p=target.createPattern?target.createPattern(c,'repeat'):null;titlePatterns.set(target,p);return p;
-}
-const TITLE_STARS=[[34,74,0],[322,88,1.3],[18,262,2.1],[340,228,.7],[46,420,1.7],[318,396,2.6],[28,590,.4],[330,560,1.1],[92,40,2.9],[268,36,.2]];
-function pixelSpark(target,x,y,s,col){
-  target.fillStyle=col;
-  target.fillRect(R(x)-s,R(y)-1,s*2,2);target.fillRect(R(x)-1,R(y)-s,2,s*2);
-  target.fillRect(R(x)-2,R(y)-2,4,4);
+// ---- 타이틀 전용 배경: 레드/오렌지 베이퍼웨이브 (시티 커넥션 타이틀처럼) ----
+// 단색 밤하늘 + 줄무늬 석양 + 수평선 띠 + 야자수 실루엣 + 도로.
+// TV 아치의 가장자리(블리드)까지 같은 장면으로 채우도록 target 을 받는다.
+const VW={sky:'#3a0814',skyLow:'#5a0b18',sunTop:'#ffb03b',sunBot:'#f21d27',horizon:500,road:596,
+  bands:['#5c0c1a','#7c1020','#a3151f','#cf2a1f','#f0501f','#ff8a3b'],palm:'#1a050a'};
+function vwPalm(target,x,base,h,flip){
+  target.fillStyle=VW.palm;
+  // 줄기: 살짝 휜 픽셀 기둥
+  for(let i=0;i<h;i+=4){const k=i/h, bx=x+flip*Math.round(Math.sin(k*1.6)*18);target.fillRect(R(bx-4+k*2),R(base-i-4),R(8-k*3),4);}
+  const tx=x+flip*Math.round(Math.sin(1.6)*18), ty=base-h;
+  // 잎: 부채꼴로 늘어진 픽셀 가지
+  for(const [ang,len] of [[-2.7,44],[-2.2,50],[-1.7,40],[-1.2,50],[-.6,46],[-.15,40],[-3.1,36]]){
+    for(let d=0;d<len;d+=3){const droop=(d/len)**2*22, px=tx+Math.cos(ang)*d, py=ty+Math.sin(ang)*d*.55+droop;
+      const w=R(6-d/len*4);target.fillRect(R(px-w/2),R(py-w/2),w,w);}
+  }
+  target.fillRect(R(tx-5),R(ty-4),10,8);
 }
 function paintTitleBackdrop(target){
-  const t=game.t||0,pat=titlePattern(target);
-  const off=(t*14)%48;
-  target.save();
-  target.fillStyle=pat||'#1b0c10';target.translate(off,off);
-  target.fillRect(-GW-off,-GH-off,GW*3,GH*3);
-  target.restore();
-  // 위아래 어둡게 (타이틀과 손 영역에 시선이 모이게)
-  const g=target.createLinearGradient(0,-40,0,GH);
-  g.addColorStop(0,'rgba(22,11,14,.85)');g.addColorStop(.28,'rgba(22,11,14,0)');
-  g.addColorStop(.7,'rgba(22,11,14,0)');g.addColorStop(1,'rgba(22,11,14,.7)');
-  target.fillStyle=g;target.fillRect(-GW,-GH,GW*3,GH*3);
-  // 아치 밖까지 이어지는 반짝임
-  for(const [x,y,ph] of [...TITLE_STARS,[-40,160,.9],[400,300,1.9],[-30,480,2.4],[392,120,.3]]){
-    const k=(Math.sin(t*2.2+ph*2.4)+1)/2; if(k<.55)continue;
-    pixelSpark(target,x,y,k>.85?5:3,k>.85?OVEN.red:OVEN.deepRed);
+  const t=game.t||0, H=VW.horizon;
+  target.fillStyle=VW.sky;target.fillRect(-GW,-GH,GW*3,GH*3);
+  // 하늘 아래쪽이 조금 밝아지는 계단식 띠 (그라데이션 대신 픽셀 밴드)
+  const steps=['#410916','#480a17','#500b18','#590c19','#630d1a'];
+  steps.forEach((c,i)=>{target.fillStyle=c;target.fillRect(-GW,H-150+i*28,GW*3,28);});
+  // 석양: 위 오렌지 → 아래 레드, 아래쪽은 가로줄로 잘린다
+  const cx=GW/2, cy=H-6, r=86;
+  for(let y=-r;y<=0;y+=2){
+    const k=(y+r)/r, cut=k>.45&&((y+r)%14)<Math.round((k-.45)*14);
+    if(cut)continue;
+    const w=Math.floor(Math.sqrt(r*r-y*y)/2)*2;
+    target.fillStyle=k<.5?VW.sunTop:k<.75?'#ff6a2b':VW.sunBot;
+    target.fillRect(R(cx-w),R(cy+y),w*2,2);
   }
+  // 수평선 띠
+  let y=H; VW.bands.forEach((c,i)=>{const h=[10,8,6,5,4,3][i];target.fillStyle=c;target.fillRect(-GW,y,GW*3,h);y+=h;});
+  // 바다/바닥: 흐르는 가로 반사선
+  target.fillStyle='#2a0610';target.fillRect(-GW,y,GW*3,VW.road-y);
+  for(let i=0;i<5;i++){const yy=y+6+i*14, off=((t*30*(1+i*.3))%80);
+    target.fillStyle=i%2?'rgba(255,138,59,.28)':'rgba(242,29,39,.35)';
+    for(let x=-GW-80+off;x<GW*2;x+=80)target.fillRect(R(x),R(yy),26-i*3,2);}
+  // 도로
+  target.fillStyle=VW.bands[5];target.fillRect(-GW,VW.road,GW*3,2);
+  target.fillStyle='#150408';target.fillRect(-GW,VW.road+2,GW*3,GH*2);
+  const dash=(t*90)%40;target.fillStyle='rgba(255,176,59,.55)';
+  for(let x=-GW-40+dash;x<GW*2;x+=40)target.fillRect(R(x),VW.road+30,18,2);
+  // 야자수 (화면 양쪽과 아치 밖)
+  vwPalm(target,22,H+2,150,1);vwPalm(target,-30,H+6,190,1);
+  vwPalm(target,340,H+2,160,-1);vwPalm(target,398,H+6,200,-1);
+  // CRT 주사선
+  target.fillStyle='rgba(0,0,0,.14)';
+  for(let yy=-GH;yy<GH*2;yy+=4)target.fillRect(-GW,yy,GW*3,1);
 }
 function paintKitchenBackdrop(target){
   if(kitchenBackdrop.key==='title'){paintTitleBackdrop(target);return;}
@@ -911,14 +927,15 @@ function titleWord(str,x,y,size,align='center'){
   const o=3;
   ctx.fillStyle=OVEN.ink;
   for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) ctx.fillText(str,R(x)+dx,R(y)+5+dy);
-  ctx.fillStyle=OVEN.deepRed; ctx.fillText(str,R(x),R(y)+5);
+  ctx.fillStyle=OVEN.orange; ctx.fillText(str,R(x),R(y)+5);
   ctx.fillStyle=OVEN.ink;
   for(const [dx,dy] of [[-o,0],[o,0],[0,-o],[0,o],[-o,-o],[o,-o],[-o,o],[o,o]]) ctx.fillText(str,R(x)+dx,R(y)+dy);
+  ctx.fillStyle=OVEN.paper; ctx.fillText(str,R(x),R(y)-2);
   ctx.fillStyle=OVEN.red; ctx.fillText(str,R(x),R(y));
 }
 function titleDot(x,y){
   ctx.fillStyle=OVEN.ink;ctx.fillRect(R(x)-6,R(y)-6,12,12);
-  ctx.fillStyle=OVEN.green;ctx.fillRect(R(x)-3,R(y)-3,6,6);
+  ctx.fillStyle=OVEN.orange;ctx.fillRect(R(x)-3,R(y)-3,6,6);
 }
 function drawTitle(y){
   const size=48,cw=size/2,gap=26;
@@ -946,32 +963,31 @@ function drawTitleCloud(cx,cy,t){
   for(let i=0;i<6;i++){const a=t*.9+i*Math.PI/3, px=cx+Math.cos(a)*176, py=cy+bob+Math.sin(a)*96;
     ctx.fillStyle=OVEN.ink;pixelBlob(px,py,9);ctx.fillStyle=i%3===0?OVEN.green:i%2?OVEN.red:OVEN.paper;pixelBlob(px,py,6);}
 }
-// 재료들이 서 있는 무대 (그림자 + 바닥 띠)
-function drawTitleStage(t){
-  ctx.fillStyle='rgba(22,11,14,.55)';ctx.fillRect(0,352,GW,6);
-  ctx.fillStyle=OVEN.red;ctx.fillRect(0,350,GW,2);
-  FOODS.forEach((key,i)=>{
-    const ph=t*3.2+i*2.1, jump=Math.max(0,Math.sin(ph))*22, x=78+i*102;
-    const sw=R(34-jump*.5);ctx.fillStyle='rgba(22,11,14,.6)';ctx.fillRect(R(x-sw/2),346,sw,4);
-    sprite(key,x,318-jump,1.15,Math.sin(ph)*.08);
-  });
+// 재료들이 도로 위를 줄지어 달린다 (시티 커넥션의 택시 줄처럼)
+function drawTitleParade(t){
+  const gap=120, span=GW+gap, off=(t*46)%gap;
+  for(let n=-1;n<4;n++){
+    const key=FOODS[((n+Math.floor(t*46/gap))%3+3)%3], x=-60+n*gap+off;
+    const hop=Math.abs(Math.sin(t*9+n))*4;
+    ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(R(x-18),VW.road+4,36,4);
+    sprite(key,x,VW.road-24-hop,.85,key==='ricecake'?0:Math.sin(t*9+n)*.05);
+  }
 }
 function drawAttract(t){
   bg('title');
-  drawTitleCloud(GW/2,166,t);
-  drawTitle(134);
-  drawTitleStage(t);
+  drawTitle(150);
+  drawTitleParade(t);
   const cdLeft=game.cooldownUntil-t, waiting=cdLeft>0||game.needExit;
   const hold=game.holdStart===null?0:clamp((t-game.holdStart)/T.START_HOLD,0,1);
-  const hy=452;
+  const hy=296;
   // 손 링: 인식되면 그린으로 차오른다
   pixelRing(GW/2,hy,38,hold,OVEN.green,4);
   ctx.globalAlpha=waiting?.35:1;
   ctx.drawImage(CUR_HAND,R(GW/2-24),hy-21+R(Math.sin(t*3)*3),48,42);
   // PUSH START처럼 깜빡이는 한 줄
   const blink=hold>0||((t*1.6)%1)<.62;
-  if(blink){ctx.fillStyle='rgba(22,11,14,.72)';ctx.fillRect(GW/2-86,520,172,32);
-    label('손을 인식해 시작',GW/2,536,16,hold>0?OVEN.green:OVEN.paper);}
+  if(blink){ctx.fillStyle='rgba(22,11,14,.72)';ctx.fillRect(GW/2-86,352,172,32);
+    label('손을 인식해 시작',GW/2,368,16,hold>0?OVEN.green:OVEN.paper);}
   ctx.globalAlpha=1;
 }
 function drawIntro(t){
