@@ -28,7 +28,7 @@
   #err{position:absolute;left:calc(16*var(--u));right:calc(16*var(--u));top:45%;text-align:center;
     font-size:calc(12*var(--u));line-height:1.6;color:#ffd27a;z-index:9;white-space:pre-line;}
   .hidden{display:none!important;}
-  video{position:absolute;left:-9999px;top:-9999px;width:2px;height:2px;}
+  video{position:fixed;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:-1;}
 </style>
 <link rel="stylesheet" href="exhibition.css">
 </head>
@@ -190,12 +190,12 @@ const ACTIVE = {x0:0.14,x1:0.86,y0:0.10,y1:0.90};
 // ---- 손 위치 매핑 (Logitech C270 · 약 60° 화각 · 640x480 · 고정 초점) ----
 // 카메라 전체를 화면에 1:1로 대면 1.5m 앞에서 팔을 1m 넘게 움직여야 한다.
 // 손바닥 크기(=카메라와의 거리)로 움직일 범위를 정해서, 가까이 서든 멀리 서든
-// 어깨 폭 정도(약 45cm)만 움직이면 화면 끝에서 끝까지 닿게 한다.
+// 약 25~30cm만 움직여도 화면 끝에서 끝까지 닿게 한다 (카메라에 가까이 서도 과하게 움직일 필요 없음).
 // 범위를 벗어나면 범위가 손을 따라 밀려간다(자리를 옮겨도 계속 쓸 수 있음).
-const REACH={gain:Number(Q.get('reach'))||2.4,cx:.5,cy:.5,s:0,lostAt:-1e9};
+const REACH={gain:Number(Q.get('reach'))||1.5,cx:.5,cy:.5,s:0,lostAt:-1e9};
 function mapCamera(nx,ny,size,fresh,t){
   REACH.s=(!REACH.s||fresh)?size:REACH.s*.85+size*.15;
-  const hw=clamp(REACH.s*REACH.gain,.08,.34), hh=clamp(REACH.s*REACH.gain*1.15,.09,.40);
+  const hw=clamp(REACH.s*REACH.gain,.07,.22), hh=clamp(REACH.s*REACH.gain*1.15,.08,.26);
   // 새 사람(2초 이상 손이 없었다면): 지금 손 위치를 화면 가운데로 잡는다
   if(fresh&&t-REACH.lostAt>2){REACH.cx=nx;REACH.cy=ny+hh*.25;}
   if(nx>REACH.cx+hw)REACH.cx=nx-hw; if(nx<REACH.cx-hw)REACH.cx=nx+hw;
@@ -312,28 +312,31 @@ function pickHand(lms,t){
   return lms.reduce((a,b)=>size(b)>size(a)?b:a);
 }
 // 같은 카메라 프레임을 두 번 분석하지 않는다 (분석 중에는 화면이 멈추므로).
-let newCamFrame=true, rvfcOn=false;
+let newCamFrame=true, rvfcOn=false, lastSendAt=0;
 function watchCamFrames(){
   if(rvfcOn||!video.requestVideoFrameCallback)return; rvfcOn=true;
   const on=()=>{newCamFrame=true;PERF.cam++;video.requestVideoFrameCallback(on);};
   video.requestVideoFrameCallback(on);
 }
 // 성능 표시 (F 키): 화면 fps · 카메라 fps · 손 인식 fps
-const PERF={frames:0,cam:0,det:0,at:0,fps:60,camFps:0,detFps:0,show:Q.get('perf')==='1',el:null,
+const PERF={frames:0,cam:0,det:0,inf:0,infFps:0,at:0,fps:60,camFps:0,detFps:0,show:Q.get('perf')==='1',el:null,
   tick(t){this.frames++; if(t-this.at<1)return; const d=t-this.at||1;
-    this.fps=this.frames/d;this.camFps=this.cam/d;this.detFps=this.det/d;this.frames=this.cam=this.det=0;this.at=t;
+    this.fps=this.frames/d;this.camFps=this.cam/d;this.detFps=this.det/d;this.infFps=this.inf/d;this.frames=this.cam=this.det=this.inf=0;this.at=t;
     if(!this.show){if(this.el)this.el.style.display='none';return;}
     if(!this.el){this.el=document.createElement('div');Object.assign(this.el.style,{position:'fixed',left:'8px',top:'8px',zIndex:99,
       font:'16px monospace',color:'#7dff8a',background:'rgba(0,0,0,.7)',padding:'6px 10px',whiteSpace:'pre'});document.body.appendChild(this.el);}
     this.el.style.display='block';
-    this.el.textContent=`화면 ${this.fps.toFixed(0)}fps · 카메라 ${this.camFps.toFixed(0)}fps · 손인식 ${this.detFps.toFixed(0)}fps\n렌더 배율 ${window.exhibitionDisplay?.k||1} · 범위 ${REACH.gain}`;}};
+    this.el.textContent=`화면 ${this.fps.toFixed(0)}fps · 분석 ${this.infFps.toFixed(0)}회/초 · 손 잡힘 ${this.detFps.toFixed(0)}회/초\n렌더 배율 ${window.exhibitionDisplay?.k||1} · 범위 ${REACH.gain}`;}};
 addEventListener('keydown',e=>{if(!e.repeat&&e.key.toLowerCase()==='f')PERF.show=!PERF.show;});
 async function camLoop(){
   if(!SIM && !BOT){
-    if(camOK && handsModel && !sending && video.readyState>=2 && (newCamFrame||!rvfcOn)){
-      sending=true; newCamFrame=false;
+    // 새 프레임 알림(rVFC)은 화면 밖 video 에서 거의 안 오는 브라우저가 있어서 기다리지 않는다.
+    // 분석이 끝나는 대로 다음 프레임을 보내되, 초당 40번을 넘지 않게만 제한한다.
+    const tn=performance.now();
+    if(camOK && handsModel && !sending && video.readyState>=2 && tn-lastSendAt>=25){
+      sending=true; newCamFrame=false; lastSendAt=tn;
       try{await handsModel.send({image:video});}catch(e){cameraState='tracking-error';showErr('손 인식을 다시 연결하고 있어요');}
-      sending=false;
+      sending=false; PERF.inf++;
     }
     drawCam();
   }
