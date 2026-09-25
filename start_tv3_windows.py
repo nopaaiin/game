@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 from exhibition_server import Handler
 
@@ -56,6 +57,30 @@ def browser_command(browser, url, profile):
     ]
 
 
+STARTUP_GRACE = 90   # 모델 로딩·카메라 권한까지 기다리는 시간(초)
+HEARTBEAT_LIMIT = 45  # 이 시간 동안 게임 화면이 살아 있다는 신호가 없으면 다시 연다
+
+
+def restart_reason(exit_code, started, last_heartbeat, now):
+    """Why the kiosk browser should be reopened, or None."""
+    if exit_code is not None and exit_code != 0:
+        return f'브라우저가 비정상 종료되었습니다 (코드 {exit_code}).'
+    if now - started < STARTUP_GRACE:
+        return None
+    if last_heartbeat is None or now - last_heartbeat > HEARTBEAT_LIMIT:
+        return '게임 화면이 응답하지 않습니다.'
+    return None
+
+
+def stop_process(process):
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+
+
 def main():
     if sys.platform != 'win32':
         print('Windows용 실행기입니다. macOS에서는 start_tv3.command를 열어 주세요.')
@@ -74,11 +99,23 @@ def main():
         print('OVEN SAUNA · 3번 TV 게임 시작')
         print('TV를 세로 방향으로 설정해 주세요. 종료: Alt + F4')
         print('첫 실행 때는 Windows 설정에서 카메라 사용을 허용해 주세요.')
-        process = subprocess.Popen(browser_command(browser, url, ROOT / '.kiosk-profile-tv3-windows'))
-        code = process.wait()
-        if code:
-            raise RuntimeError(f'브라우저가 종료되었습니다 (코드 {code}). 다시 실행해 주세요.')
-        return 0
+        command = browser_command(browser, url, ROOT / '.kiosk-profile-tv3-windows')
+        server.last_heartbeat = None
+        process = subprocess.Popen(command)
+        started = time.monotonic()
+        while True:
+            code = process.poll()
+            if code == 0:
+                return 0  # Alt + F4: the operator closed the game on purpose.
+            reason = restart_reason(code, started, server.last_heartbeat, time.monotonic())
+            if reason:
+                print(f'{reason} 게임을 다시 엽니다.')
+                stop_process(process)
+                time.sleep(3)
+                server.last_heartbeat = None
+                process = subprocess.Popen(command)
+                started = time.monotonic()
+            time.sleep(2)
     except KeyboardInterrupt:
         return 0
     except OSError as error:

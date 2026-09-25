@@ -76,6 +76,28 @@ class WindowsLauncherTests(TestCase):
                     server.shutdown()
                     thread.join()
 
+    def test_restart_rules(self):
+        self.assertIsNone(launcher.restart_reason(None, 0, None, 30))            # still starting
+        self.assertIsNotNone(launcher.restart_reason(None, 0, None, 120))        # never reported alive
+        self.assertIsNone(launcher.restart_reason(None, 0, 100, 120))            # alive
+        self.assertIsNotNone(launcher.restart_reason(None, 0, 100, 200))         # frozen
+        self.assertIsNotNone(launcher.restart_reason(3, 0, 100, 101))            # crashed
+
+    def test_heartbeat_endpoint(self):
+        from urllib.request import Request
+        with TemporaryDirectory() as folder:
+            with ThreadingHTTPServer(('127.0.0.1', 0), partial(Handler, directory=folder)) as server:
+                server.last_heartbeat = None
+                thread = Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    with urlopen(Request(f'http://127.0.0.1:{server.server_port}/__heartbeat', method='POST', data=b'')) as response:
+                        self.assertEqual(response.status, 204)
+                    self.assertIsNotNone(server.last_heartbeat)
+                finally:
+                    server.shutdown()
+                    thread.join()
+
 
 if __name__ == '__main__':
     main()

@@ -4,6 +4,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 import sys
+import time
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -26,6 +27,15 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(data)
             return
         return super().do_GET()
+
+    def do_POST(self):
+        # The game page reports that it is alive every 5s; the launcher restarts a frozen browser.
+        if self.path == '/__heartbeat':
+            self.server.last_heartbeat = time.monotonic()
+            self.send_response(204)
+            self.end_headers()
+            return
+        self.send_error(404)
 
     def translate_path(self, path):
         # Do not expose the local browser profile through the static server.
