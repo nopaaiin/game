@@ -180,7 +180,7 @@ const hand = {
   visible:false, openPalm:false, x:GW/2, y:GH*0.7, size:0,
   seenAt:-1e9, lostAt:0, firstSeenAt:0,
   samples:[],        // 썰기용 최근 경로 [{x,y,t}]
-  fx:new OneEuro(2.2,0.012), fy:new OneEuro(2.2,0.012),
+  fx:new OneEuro(2.2,0.03), fy:new OneEuro(2.2,0.03),
   lm:null, tx:GW/2, ty:GH*0.7, rawX:null, rawY:null,
 };
 // 감지가 잠깐 끊겨도(빠른 손의 흔들림) 손을 잃은 것으로 보지 않는 시간
@@ -213,21 +213,20 @@ function feedHand(nx, ny, size, t){
   hand.tx=hand.fx.f(gx,t); hand.ty=hand.fy.f(gy,t); hand.size=size;
   hand.visible=true; hand.seenAt=t;
   if(SIM||BOT||fresh){ hand.x=hand.tx; hand.y=hand.ty; }
-  if(SIM||BOT){
-    hand.openPalm=true;
-    hand.samples.push({x:hand.x,y:hand.y,t});
-    while(hand.samples.length && t-hand.samples[0].t>0.4) hand.samples.shift();
-  }
+  if(SIM||BOT) hand.openPalm=true;
+  // 판정용 경로는 카메라가 알려 준 위치 그대로 쓴다 (화면 보정 지연 없음).
+  // 잠깐 놓쳤다 다시 잡혀도(0.3초 안) 경로가 이어져서, 빠르게 휘두른 구간도 한 선분으로 판정된다.
+  hand.samples.push({x:hand.tx,y:hand.ty,t});
+  while(hand.samples.length && t-hand.samples[0].t>0.4) hand.samples.shift();
 }
 // 카메라는 초당 15~30번만 손을 알려 준다. 화면(60fps)에서는 최근 위치를 향해
 // 매 프레임 부드럽게 따라가고, 칼 경로도 매 프레임 기록해서 끊김 없이 이어진다.
-const HAND_FOLLOW=30;
+// 칼(2단계)은 거의 즉시 따라가고, 그릇·온도 조절은 조금 더 부드럽게.
 function updateHandDisplay(t,dt){
   if(SIM||BOT||!hand.visible)return;
-  const a=1-Math.exp(-HAND_FOLLOW*Math.max(dt,0));
+  const follow=game.stage?.cursorKind==='knife'?80:30;
+  const a=1-Math.exp(-follow*Math.max(dt,0));
   hand.x+=(hand.tx-hand.x)*a; hand.y+=(hand.ty-hand.y)*a;
-  hand.samples.push({x:hand.x,y:hand.y,t});
-  while(hand.samples.length && t-hand.samples[0].t>0.4) hand.samples.shift();
 }
 function markNoHand(t){
   if(hand.visible && t-hand.seenAt>HAND_GRACE){ REACH.lostAt=t; hand.visible=false; hand.openPalm=false; hand.lostAt=t; hand.lm=null; }
@@ -707,9 +706,10 @@ const Stage1 = {
 // 속도는 초당 픽셀로 계산해 화면 주사율과 상관없이 같다.
 // =====================================================================
 const Stage2 = {
-  name:'썰기', no:2, GOAL:15, TIME:45,
-  howto:['손을 빠르게 휘둘러서','날아오는 재료를 베어요'],
-  G:1100, SLASH:420, HIT_R:40,
+  name:'썰기', no:2, GOAL:12, TIME:45,
+  howto:['손을 휘둘러서','날아오는 재료를 베어요'],
+  // 사람 손 + 웹캠 기준으로 느슨하게: 천천히 떠오르고, 가볍게 휘둘러도 베이고, 판정 원이 넓다
+  G:760, SLASH:240, HIT_R:56,
   init(){
     this.cut=0; this.score=0; this.objs=[]; this.halves=[]; this.trail=[];
     this.spawnIn=0.5; this.elapsed=0; this.lastCutAt=-9; this.combo=0; this.lastT=null; this.bag=[];
@@ -717,7 +717,7 @@ const Stage2 = {
   progress(){return this.cut/this.GOAL;},
   nextKey(){if(!this.bag.length)this.bag=[...FOODS].sort(()=>Math.random()-.5);return this.bag.pop();},
   toss(){
-    const x=rnd(70,GW-70), apex=rnd(150,300), y0=GH+40;
+    const x=rnd(80,GW-80), apex=rnd(170,300), y0=GH+40;
     const vy=-Math.sqrt(2*this.G*(y0-apex)), tUp=-vy/this.G;
     const land=clamp(x+rnd(-120,120),50,GW-50);
     this.objs.push({key:this.nextKey(),x,y:y0,vx:(land-x)/(2*tUp),vy,rot:0,vr:rnd(-3,3)});
@@ -725,9 +725,9 @@ const Stage2 = {
   update(dt,t){
     this.elapsed+=dt;
     this.spawnIn-=dt;
-    if(this.spawnIn<=0 && this.objs.length<4){
-      this.toss(); if(Math.random()<.3) setTimeout(()=>{if(game.stage===this&&game.mode==='play')this.toss();},250);
-      this.spawnIn=1.1-this.progress()*0.3;
+    if(this.spawnIn<=0 && this.objs.length<3){
+      this.toss(); if(this.progress()>.4&&Math.random()<.25) setTimeout(()=>{if(game.stage===this&&game.mode==='play')this.toss();},350);
+      this.spawnIn=1.25-this.progress()*0.3;
     }
     for(const o of this.objs){o.x+=o.vx*dt;o.y+=o.vy*dt;o.vy+=this.G*dt;o.rot+=o.vr*dt;}
     // 손 경로 선분 수집
